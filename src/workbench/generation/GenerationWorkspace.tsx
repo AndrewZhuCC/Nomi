@@ -43,7 +43,12 @@ export default function GenerationWorkspace({
           {aiSidebar}
         </aside>
       ) : null}
-      <TimelinePanel density="compact" regionLabel="生成时间轴" actionLabelPrefix="生成时间轴-" />
+      <div className={cn(
+        'workbench-generation__timeline',
+        'col-span-full min-w-0 min-h-0',
+      )}>
+        <TimelinePanel density="compact" regionLabel="生成时间轴" actionLabelPrefix="生成时间轴-" />
+      </div>
     </section>
   )
 }
