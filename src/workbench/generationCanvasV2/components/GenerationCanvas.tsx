@@ -12,6 +12,8 @@ import type { GenerationCanvasNode, GenerationNodeKind } from '../model/generati
 import { getGenerationNodeComponent } from '../nodes/renderRegistry'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { notifyModelOptionsRefresh, useModelOptionsState } from '../../../config/useModelOptions'
+import { useWorkbenchStore } from '../../workbenchStore'
+import { getBuiltinCategoryById } from '../../project/projectCategories'
 import '../styles/generationCanvas.css'
 
 const GENERATION_PROVIDER = 'chatfire'
@@ -118,8 +120,21 @@ function getSelectedBounds(nodes: readonly GenerationCanvasNode[], selectedNodeI
 
 export default function GenerationCanvas({ readOnly = false }: GenerationCanvasProps): JSX.Element {
   const isReady = useGenerationCanvasStore((state) => state.isReady)
-  const nodes = useGenerationCanvasStore((state) => state.nodes)
-  const edges = useGenerationCanvasStore((state) => state.edges)
+  const allNodes = useGenerationCanvasStore((state) => state.nodes)
+  const allEdges = useGenerationCanvasStore((state) => state.edges)
+  const activeCategoryId = useWorkbenchStore((state) => state.activeCategoryId)
+  // Phase E3: filter nodes by active sub-canvas. Nodes with no categoryId
+  // fall back to the project default ("shots") so legacy projects keep
+  // rendering until E4 migrates them.
+  const nodes = React.useMemo(() => {
+    if (!activeCategoryId) return allNodes
+    return allNodes.filter((node) => (node.categoryId || 'shots') === activeCategoryId)
+  }, [allNodes, activeCategoryId])
+  const visibleNodeIds = React.useMemo(() => new Set(nodes.map((n) => n.id)), [nodes])
+  const edges = React.useMemo(
+    () => allEdges.filter((edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)),
+    [allEdges, visibleNodeIds],
+  )
   const selectedNodeIds = useGenerationCanvasStore((state) => state.selectedNodeIds)
   const addNode = useGenerationCanvasStore((state) => state.addNode)
   const clearSelection = useGenerationCanvasStore((state) => state.clearSelection)
@@ -152,8 +167,28 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
 
   // Pan/zoom state
   const initialViewport = React.useMemo(() => createInitialViewport(), [])
-  const [zoom, setZoom] = React.useState(initialViewport.zoom)
-  const [offset, setOffset] = React.useState(initialViewport.offset)
+  const rememberCategoryViewport = useWorkbenchStore((state) => state.rememberCategoryViewport)
+  const categoryViewports = useWorkbenchStore((state) => state.categoryViewports)
+  // Phase E3: each graph-canvas category preserves its own zoom + offset
+  const seedViewport = React.useMemo(() => {
+    const remembered = categoryViewports[activeCategoryId]
+    return remembered || initialViewport
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCategoryId])
+  const [zoom, setZoom] = React.useState(seedViewport.zoom)
+  const [offset, setOffset] = React.useState(seedViewport.offset)
+  const lastCategoryRef = React.useRef(activeCategoryId)
+  React.useEffect(() => {
+    if (lastCategoryRef.current === activeCategoryId) return
+    // save outgoing
+    rememberCategoryViewport(lastCategoryRef.current, { zoom, offset })
+    // load incoming
+    const next = categoryViewports[activeCategoryId] || initialViewport
+    setZoom(next.zoom)
+    setOffset(next.offset)
+    lastCategoryRef.current = activeCategoryId
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCategoryId])
   const isPanningRef = React.useRef(false)
   const panStartRef = React.useRef<{ clientX: number; clientY: number; offsetX: number; offsetY: number } | null>(null)
   const offsetFrameRef = React.useRef<number | null>(null)
@@ -550,6 +585,32 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
 
   const zoomPercent = Math.round(zoom * 100)
   const selectedCount = selectedNodeIds.length
+
+  // Phase E3: when a non-graph category is active, render a placeholder
+  // instead of the graph canvas. Real subviews ship in Phase F.
+  const activeCategory = getBuiltinCategoryById(activeCategoryId)
+  if (activeCategory && activeCategory.viewType !== 'graph-canvas') {
+    return (
+      <section
+        className={cn(
+          'generation-canvas-v2',
+          'grid place-items-center w-full h-full min-w-0 min-h-0 bg-[#f7f7f9] text-workbench-ink',
+        )}
+        aria-label={`${activeCategory.name} 子画布`}
+        data-ready="true"
+        data-category-id={activeCategory.id}
+        data-view-type={activeCategory.viewType}
+      >
+        <div className={cn('flex flex-col items-center gap-3 px-8 py-10', 'animate-[fadeIn_180ms_ease-out]')}>
+          <div className="text-[48px] leading-none" aria-hidden>{activeCategory.icon}</div>
+          <div className="text-[15px] font-medium text-nomi-ink">{activeCategory.name} 子画布开发中</div>
+          <div className="text-[12px] text-nomi-ink-40 max-w-[300px] text-center">
+            Phase F 落地：{activeCategory.viewType === 'document' ? '故事编辑器' : activeCategory.viewType === 'card-grid' ? '卡片网格' : activeCategory.viewType === 'asset-library' ? '资产库视图' : activeCategory.viewType === 'audio-list' ? '音频列表' : '导出列表'}
+          </div>
+        </div>
+      </section>
+    )
+  }
 
   return (
     <section
