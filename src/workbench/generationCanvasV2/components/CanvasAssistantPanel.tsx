@@ -13,6 +13,7 @@ import {
   STORYBOARD_PLANNING_EVENT,
   type StoryboardPlanningRequest,
 } from '../agent/storyboardLauncher'
+import AgentPlanCard, { summarizeAgentPlan } from './AgentPlanCard'
 import { getGenerationNodeDefaultTitle } from '../model/generationNodeKinds'
 import type { GenerationNodeKind } from '../model/generationCanvasTypes'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
@@ -24,7 +25,15 @@ type PendingToolCall = {
   toolCallId: string
   toolName: string
   args: unknown
-  confirm: (decision: { ok: true; result?: unknown } | { ok: false; message?: string }) => Promise<void>
+  /**
+   * Confirm or reject the pending tool call. `overrides` lets the UI
+   * patch the args before they are applied — used by the plan card so a
+   * user-edited prompt overrides the agent's original suggestion.
+   */
+  confirm: (
+    decision: { ok: true; result?: unknown } | { ok: false; message?: string },
+    overrides?: Record<string, unknown>,
+  ) => Promise<void>
 }
 
 function summarizeToolCall(toolName: string, args: unknown): string {
@@ -73,10 +82,14 @@ export default function CanvasAssistantPanel({
   const [mode, setMode] = React.useState<'agent' | 'chat' | 'refine'>('agent')
   const [pendingToolCalls, setPendingToolCalls] = React.useState<PendingToolCall[]>([])
 
-  const resolvePending = React.useCallback((toolCallId: string, decision: { ok: true; result?: unknown } | { ok: false; message?: string }) => {
+  const resolvePending = React.useCallback((
+    toolCallId: string,
+    decision: { ok: true; result?: unknown } | { ok: false; message?: string },
+    overrides?: Record<string, unknown>,
+  ) => {
     setPendingToolCalls((current) => {
       const target = current.find((item) => item.toolCallId === toolCallId)
-      if (target) void target.confirm(decision)
+      if (target) void target.confirm(decision, overrides)
       return current.filter((item) => item.toolCallId !== toolCallId)
     })
   }, [])
@@ -218,10 +231,14 @@ export default function CanvasAssistantPanel({
               toolCallId: event.toolCallId,
               toolName: event.toolName,
               args: event.args,
-              confirm: async (decision) => {
+              confirm: async (decision, overrides) => {
                 if (decision.ok) {
+                  const baseArgs = (event.args && typeof event.args === 'object')
+                    ? event.args as Record<string, unknown>
+                    : {}
+                  const effectiveArgs = overrides ? { ...baseArgs, ...overrides } : baseArgs
                   try {
-                    const result = await applyConfirmedToolCall(event.toolName, event.args)
+                    const result = await applyConfirmedToolCall(event.toolName, effectiveArgs)
                     toolActionCount += 1
                     await event.confirm({ ok: true, result })
                   } catch (error: unknown) {
@@ -361,18 +378,32 @@ export default function CanvasAssistantPanel({
         </div>
       </header>
       <div className={cn('flex flex-col gap-3 min-h-0 overflow-auto p-4')}>
-        {pendingToolCalls.length > 0 ? (
-          <div
-            className={cn(
-              'flex flex-col gap-2 p-3 rounded-nomi border border-nomi-accent-soft bg-nomi-accent-soft/40',
-            )}
-            data-pending-tool-calls="true"
-            aria-label="待确认的 Agent 工具调用"
-          >
-            <div className={cn('text-nomi-accent text-[12px] font-medium uppercase tracking-wider')}>
-              Agent 准备调用工具
-            </div>
-            {pendingToolCalls.map((call) => (
+        {pendingToolCalls.length > 0 ? (() => {
+          // Aggregate consecutive create_canvas_nodes + connect_canvas_edges
+          // pairs into a single storyboard plan card; everything else falls
+          // back to the per-call confirmation list below.
+          const plan = summarizeAgentPlan(pendingToolCalls)
+          const planCallIds = new Set([plan?.createCallId, plan?.connectCallId].filter(Boolean) as string[])
+          const remaining = plan
+            ? pendingToolCalls.filter((call) => !planCallIds.has(call.toolCallId))
+            : pendingToolCalls
+          return (
+            <div className={cn('flex flex-col gap-3')}>
+              {plan ? (
+                <AgentPlanCard plan={plan} resolveCall={resolvePending} />
+              ) : null}
+              {remaining.length > 0 ? (
+                <div
+                  className={cn(
+                    'flex flex-col gap-2 p-3 rounded-nomi border border-nomi-accent-soft bg-nomi-accent-soft/40',
+                  )}
+                  data-pending-tool-calls="true"
+                  aria-label="待确认的 Agent 工具调用"
+                >
+                  <div className={cn('text-nomi-accent text-[12px] font-medium uppercase tracking-wider')}>
+                    Agent 准备调用工具
+                  </div>
+                  {remaining.map((call) => (
               <div
                 key={call.toolCallId}
                 className={cn('flex flex-col gap-2 p-2 rounded-nomi-sm bg-nomi-paper border border-nomi-line-soft')}
@@ -407,9 +438,12 @@ export default function CanvasAssistantPanel({
                   </WorkbenchButton>
                 </div>
               </div>
-            ))}
-          </div>
-        ) : null}
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )
+        })() : null}
         {messages.length === 0 ? (
           <div className={cn(
             'flex flex-1 flex-col items-center justify-center gap-[10px]',
