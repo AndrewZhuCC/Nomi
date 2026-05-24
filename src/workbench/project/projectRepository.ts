@@ -19,6 +19,8 @@ import type { WorkbenchDocument } from "../workbenchTypes";
 import { assertWorkbenchProjectMediaUrlsPersistable } from "./projectMediaMigration";
 import { getDesktopBridge } from "../../desktop/bridge";
 import { normalizeCategories } from "./projectCategories";
+import { buildTemplateCategories, getProjectTemplate } from "../library/projectTemplates";
+import { createDefaultWorkbenchDocument } from "../workbenchTypes";
 
 function extractCanvasThumbnailUrls(
     nodes: GenerationCanvasNode[],
@@ -363,8 +365,40 @@ export function listLocalProjects(): WorkbenchProjectSummary[] {
     });
 }
 
-export function createLocalProject(name?: string): WorkbenchProjectRecordV1 {
+function seedDocFromMarkdown(markdown: string): unknown {
+    const lines = markdown.split(/\r?\n/);
+    const blocks: Array<Record<string, unknown>> = [];
+    for (const line of lines) {
+        const trimmed = line.replace(/\s+$/, "");
+        if (!trimmed) continue;
+        if (trimmed.startsWith("# ")) {
+            blocks.push({
+                type: "heading",
+                attrs: { level: 1 },
+                content: [{ type: "text", text: trimmed.slice(2) }],
+            });
+        } else if (trimmed.startsWith("## ")) {
+            blocks.push({
+                type: "heading",
+                attrs: { level: 2 },
+                content: [{ type: "text", text: trimmed.slice(3) }],
+            });
+        } else {
+            blocks.push({
+                type: "paragraph",
+                content: [{ type: "text", text: trimmed }],
+            });
+        }
+    }
+    return { type: "doc", content: blocks };
+}
+
+export function createLocalProject(
+    name?: string,
+    templateId?: string,
+): WorkbenchProjectRecordV1 {
     const now = Date.now();
+    const template = getProjectTemplate(templateId || null);
     const summary: WorkbenchProjectSummary = {
         id: createProjectId(),
         name:
@@ -376,7 +410,18 @@ export function createLocalProject(name?: string): WorkbenchProjectRecordV1 {
         revision: 0,
         savedAt: now,
     };
-    const record = createProjectRecord(summary);
+    const docDefaults = createDefaultWorkbenchDocument();
+    const seededDocument = template.seedDocument
+        ? {
+              ...docDefaults,
+              contentJson: seedDocFromMarkdown(template.seedDocument),
+              updatedAt: now,
+          }
+        : docDefaults;
+    const record = createProjectRecord(summary, {
+        workbenchDocument: seededDocument,
+        categories: buildTemplateCategories(template),
+    });
     const desktop = getDesktopBridge();
     if (desktop) {
         return desktop.projects.create(record) as WorkbenchProjectRecordV1;

@@ -91,8 +91,8 @@ export function useLocalProjects(): {
   }
 }
 
-export function createLocalProject(name?: string): LocalProjectRecord {
-  const record = createProjectRecord(name)
+export function createLocalProject(name?: string, templateId?: string): LocalProjectRecord {
+  const record = createProjectRecord(name, templateId)
   publishLocalProjectRecord(record)
   return record
 }
