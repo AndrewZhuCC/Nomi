@@ -244,22 +244,63 @@ function getVariantCount(node, allNodes) {
 
 ### §3.3 数据模型现状 vs 期望
 
-| 字段 | 现状 | 期望（最终） | v0.6.x 实现策略 |
+| 字段 | 现状 | 期望（最终） | v0.7 实现策略 |
 |---|---|---|---|
 | `title` | ✅ 已有 | 沿用 | 沿用，作为名字 |
-| `prompt` | ✅ 已有 | 沿用 | 第一行作为 fallback "一句话设定" |
+| `prompt` | ✅ 已有 | 沿用（仅生图用，**不**作为 tagline 源）| 沿用 |
 | `result.url` | ✅ 已有 | 沿用 | 主视觉 |
-| `meta.tagline` | ❌ | 一句话设定（角色/场景/道具的"档案描述"） | **新增**，可选 |
-| `meta.tags` | ❌ | 标签数组 | **新增**，可选 |
-| `meta.ownedBy` | ❌ | 道具归属（角色 nodeId 或字符串） | **新增**（道具用），可选 |
-| `meta.mood` | ❌ | 场景氛围 tag | **新增**（场景用），可选 |
-| `meta.audioKind` | ❌ | BGM / SFX / VO | **新增**（声音用），可选 |
-| `meta.durationSec` | ⚠️ 已有 `durationSeconds` 字段在 result | 沿用 | 沿用 |
+| `meta.tagline` | ❌ | 一句话设定 | **AI 从剧本提取** |
+| `meta.tags` | ❌ | 标签数组 | **AI 从剧本提取** |
+| `meta.ownedBy` | ❌ | 道具归属 | **AI 从剧本提取** |
+| `meta.mood` | ❌ | 场景氛围 tag | **AI 从剧本提取** |
+| `meta.audioKind` | ❌ | BGM / SFX / VO | **AI 从剧本提取** |
+| `meta.durationSec` | ⚠️ 已有 `durationSeconds` 在 result | 沿用 | 沿用 |
 
-**关键决定：** 这些新字段**全部存到 `node.meta` 里**，不动顶层 schema。原因：
-- `meta` 已经是 `Record<string, unknown>`，加什么都行
-- 不需要 zod schema 改动 + migration
-- 缺失时优雅降级（"暂无 tagline"）
+**关键决定：**
+- 新字段都存 `node.meta`，不动顶层 schema
+- **不**走 prompt 派生 / 用户手填的 placeholder 引导
+- AI 不知道的字段就空着，**卡片不显示对应行**（不显示 "+ 添加" 提示）
+
+### §3.4 信息来源分层（Sources）
+
+每个字段的填充来源严格分 3 层，优先级从高到低：
+
+**Level 1：节点自带（白吃）**
+- `title` / `result.url`：节点创建时就有
+- 使用次数 / 变体数：基于现有数据 live 计算
+- 这层 100% 可靠
+
+**Level 2：AI 从剧本一次性提取**
+- 创作区 (Creation workspace) 的剧本是**唯一 source of truth**
+- 通过 AI 一次 call 把整个剧本喂给 vision/text 模型，返回 JSON：所有 entity（人物 / 场景 / 道具 / 声音）+ 其属性（tagline / mood / ownedBy / audioKind）
+- 把 AI 返回的字段写入对应卡片节点的 `node.meta`
+- AI 不确定 / 没找到的字段就**不写**
+
+**Level 3：用户手动覆盖**
+- 卡片上的字段可点击 inline 编辑
+- 用户编辑 = 覆盖 Level 2 的 AI 提取值
+- 用户清空 = 下次 AI 同步会重新尝试填
+
+**Level 0：什么都没有 → 卡片不显示该行**
+- 不强迫用户看到 "+ 添加 tagline" placeholder
+- 用户从生成区**手动**新建的"无名"角色卡（剧本里不存在）只显示图 + 编号
+
+视觉规则：
+
+```
+有数据：
+┌──────────────┐
+│ [小苏头像]    │
+│ 小苏      ●12 │
+│ 反派少年14岁  │  ← Level 2 提取的
+└──────────────┘
+
+仅 Level 1（剧本里没提到 / 用户随手建的）：
+┌──────────────┐
+│ [头像]        │
+│ 角色 03    ●0 │
+└──────────────┘  ← 干净，不显示 tagline 行
+```
 
 ---
 
@@ -267,198 +308,221 @@ function getVariantCount(node, allNodes) {
 
 每个卡片严格遵循 `docs/design/nomi-design-system.md` 的 token / 组件 / patterns。
 
+### §4.0 尺寸通则（重要）
+
+**用户约束：必须完整显示图，不能裁切。** 所以所有图像类卡片采用：
+
+```
+卡片宽度 = 固定（按分类）
+图像区高度 = 卡片宽度 / 图像 aspect ratio   （完整显示图，不裁切）
+信息区高度 = 固定（按分类）
+卡片总高度 = 图像区高度 + 信息区高度
+```
+
+**Masonry 错落：** 同分类卡片宽度统一，但高度不一定齐（取决于各自图的比例）。在自由画布场景下天然支持，无需对齐。
+
+**极端比例兜底（aspect > 3:1 或 < 1:3）：** 仅这些罕见 case 强制裁到 3:1 / 1:3 边界 + tooltip 标记"已限制比例"。95% 常规比例（1:1、4:3、3:4、16:9、9:16）走完整显示。
+
 ### §4.1 `CharacterCardNode`
 
-**视觉结构**（200 × 280）：
+**视觉结构**（width=200，height 动态）：
 
 ```
-┌──────────────────────────────┐
-│ ╭───────╮            ╭──╮    │  ← TitlePill "角色" + 副本角标
-│ │角色   │            │📋│    │
-│ ╰───────╯            ╰──╯    │
-│                              │
-│                              │
-│     [头像 / 立绘]             │  ← 主图，flex-1 (~70%)
-│     占位：斜条纹 + "角色 NN"   │
-│     占位：等待生成             │
-│                              │
-│                              │
-├──────────────────────────────┤
-│ 小苏                        ●│  ← 名字 (title token) + 使用次数 dot
-│ 反派少年，14 岁，有伤疤        │  ← 一句话设定 (caption, ink-60)
-│                       ⊕3变体  │  ← 变体计数 chip (右下角)
-└──────────────────────────────┘
+1:1 图（200×200）：              9:16 图（200×356）：
+┌──────────────┐               ┌──────────────┐
+│ ╭───╮  ╭──╮  │               │ ╭───╮  ╭──╮  │
+│ │角色│  │📋│  │               │ │角色│  │📋│  │
+│ ╰───╯  ╰──╯  │               │ ╰───╯  ╰──╯  │
+│              │               │              │
+│ [完整 1:1 图] │               │              │
+│              │               │ [完整 9:16   │
+│              │               │   立绘]      │
+├──────────────┤               │              │
+│ 小苏     ●12 │               │              │
+│ 反派少年14岁  │               │              │
+│         ⊕3变 │               ├──────────────┤
+└──────────────┘               │ 小苏     ●12 │
+                               │ 反派少年14岁  │
+                               │         ⊕3变 │
+                               └──────────────┘
 ```
 
-**规格表（按设计系统 §8 模板）：**
+**规格表：**
 
 | 属性 | 值 / token |
 |---|---|
-| **尺寸** | 200 × 280 px |
-| **外框** | `border border-nomi-line rounded-nomi shadow-nomi-sm`（选中 `shadow-nomi-md` + `outline-2 outline-nomi-accent`）|
+| **宽度** | 200 px 固定 |
+| **图像区高度** | `200 / aspectRatio`（image natural aspect）；占位态用 1:1 → 200 |
+| **信息区高度** | 80 px 固定 |
+| **外框** | `border border-nomi-line rounded-nomi shadow-nomi-sm`（选中 `shadow-nomi-md` + 2px outline `nomi-accent`）|
 | **背景** | `bg-nomi-paper` |
-| **主图区** | `flex-1 min-h-0 rounded-nomi-sm overflow-hidden`，占位斜条纹（设计系统 §5.1）|
-| **名字字号** | `text-title` (16px) `font-medium` `text-nomi-ink` |
+| **图像区** | `w-full rounded-nomi-sm overflow-hidden`，图用 `object-contain object-center`（不裁），无图时斜条纹占位 |
+| **TitlePill** | 左上 absolute，同设计系统 §5.1 |
+| **副本角标** | 右上 absolute，仅当 `derivedFrom` 存在时显示 |
+| **名字字号** | `text-body` (14px) `font-medium` `text-nomi-ink` |
 | **设定字号** | `text-caption` (12px) `text-nomi-ink-60`，单行 truncate + 全文 tooltip |
-| **使用次数 dot** | 8px 圆点 `bg-nomi-accent`，旁边小数字 `text-micro text-nomi-ink-60` |
-| **变体 chip** | `rounded-full bg-nomi-ink-05 px-2 py-[2px] text-micro text-nomi-ink-60`，仅当变体 ≥1 显示 |
-| **行为** | 点击 = 选中节点；双击 = 进入编辑态（同 BaseGenerationNode）|
+| **使用次数 dot** | 8px 圆点 `bg-nomi-accent`，旁数字 `text-micro text-nomi-ink-60`；为 0 时不显示 |
+| **变体 chip** | `rounded-full bg-nomi-ink-05 px-2 py-[2px] text-micro text-nomi-ink-60`；变体 ≥1 才显示 |
+| **行为** | 点击 = 选中；双击 = 进入编辑态 |
 
-**降级（数据缺失时）：**
-- 没头像 → 显示占位斜条纹
-- 没 tagline → 隐藏第二行（不显示"暂无设定"，简洁优先）
-- 使用次数 = 0 → 不显示 dot
-- 变体 = 0 → 不显示 chip
+**空状态规则：**
+- 没头像 → 图像区 1:1 占位斜条纹 + 中央 "角色 NN / 等待生成"（同 §5.1 设计系统占位态）
+- 没 tagline → **隐藏第二行**（不显示 "+ 添加" placeholder）
+- 使用 / 变体 = 0 → 隐藏对应 dot / chip
 
 ### §4.2 `SceneCardNode`
 
-**视觉结构**（320 × 200）：
+**视觉结构**（width=320，height 动态）：
 
 ```
-┌────────────────────────────────────────┐
-│ ╭───────╮              [📋 副本]      │  ← TitlePill + 副本角标
-│ │场景    │                              │
-│ ╰───────╯                              │
-│                                        │
-│        [场景大图 / 斜条纹占位]            │  ← 主图，绝对位 (h-full)
-│                                        │
-│                                        │
-│  ┌──────────────────────────────┐       │
-│  │ 教室                    ●12 │←     │  ← 名字 + 使用次数（半透明遮罩）
-│  │ 夜 · 雨 · 冷色          ⊕2  │       │  ← 氛围 tag + 变体
-│  └──────────────────────────────┘       │
-└────────────────────────────────────────┘
+16:9 图（320×180）：               1:1 图（320×320）：
+┌──────────────────────────────┐  ┌──────────────────────────────┐
+│ ╭───╮              ╭──╮      │  │ ╭───╮              ╭──╮      │
+│ │场景│              │📋│      │  │ │场景│              │📋│      │
+│ ╰───╯              ╰──╯      │  │ ╰───╯              ╰──╯      │
+│                              │  │                              │
+│   [完整 16:9 场景图]            │  │       [完整 1:1 场景图]       │
+│                              │  │                              │
+│ ┌──────────────────────────┐ │  │                              │
+│ │ 教室                ●12  │ │  │                              │
+│ │ 夜·雨·冷色          ⊕2   │ │  │                              │
+│ └──────────────────────────┘ │  │                              │
+└──────────────────────────────┘  │                              │
+                                  │ ┌──────────────────────────┐ │
+                                  │ │ 教室                ●12  │ │
+                                  │ │ 夜·雨·冷色          ⊕2   │ │
+                                  │ └──────────────────────────┘ │
+                                  └──────────────────────────────┘
 ```
 
-**特别设计：** 信息条**浮在主图底部**（半透明黑底 + 白字），不是底部独立区。这样场景图始终全幅展示，氛围感不被切割。
+**特别设计：** 信息条**浮在主图底部偏离卡片底 8px**（半透明深底 + 白字 + backdrop-blur），不是底部独立区。这样场景图始终全幅展示，氛围感不被切割。**注意：** 信息条 absolute 定位，不占用卡片高度，所以信息区高度 = 0（仅图像区决定卡片高度）。
 
 **规格表：**
 
 | 属性 | 值 / token |
 |---|---|
-| **尺寸** | 320 × 200 px |
-| **外框** | 同 §4.1 |
-| **主图** | `absolute inset-0 rounded-nomi`，full bleed |
+| **宽度** | 320 px 固定 |
+| **图像区高度** | `320 / aspectRatio`；占位态默认 16:9 → 180 |
+| **信息区高度** | 0（信息条 absolute 浮动）|
+| **主图** | `w-full rounded-nomi overflow-hidden`，`object-contain object-center` |
 | **信息条** | `absolute bottom-2 left-2 right-2 px-3 py-2 rounded-nomi-sm`，背景 `bg-nomi-ink/[0.78]` + `backdrop-blur-md`，字色 `text-nomi-paper` |
 | **名字** | `text-body` (14px) `font-medium` |
-| **氛围 tag** | `text-micro` `text-nomi-paper/80`，多个 tag 用 `·` 分隔 |
-| **使用次数** | dot + 数字 `text-micro`，浮在右上 |
-| **变体 chip** | 同上但用更浅色 |
-| **占位态** | 没场景图时，斜条纹背景 + 中央显示"场景 NN / 等待生成"，信息条降级到普通灰底 |
+| **氛围 tag** | `text-micro` `text-nomi-paper/80`，多个 tag 用 `·` 分隔，缺失时隐藏整个 tag 行 |
+| **使用次数** | 浮在右上信息条内 |
+| **变体** | 浮在右下 |
+| **占位态** | 没场景图 → 斜条纹 16:9 占位 + 中央 "场景 NN / 等待生成"，信息条降级到普通灰底（`bg-nomi-ink-10`）|
 
 ### §4.3 `PropCardNode`
 
-**视觉结构**（200 × 200）：
+**视觉结构**（width=200，height 动态，多数为 1:1）：
 
 ```
-┌──────────────────────────────┐
-│ ╭───────╮            ╭──╮    │
-│ │道具    │            │📋│    │
-│ ╰───────╯            ╰──╯    │
-│                              │
-│      [道具图 / 斜条纹]         │  ← 正方形主图
-│                              │
-│                              │
-├──────────────────────────────┤
-│ 旧背包                     ●8│  ← 名字 + 使用次数
-│ 🔗 小苏的                    │  ← 归属 (高亮显示)
-└──────────────────────────────┘
+1:1 图（200×200，最常见）：
+┌──────────────┐
+│ ╭───╮  ╭──╮  │
+│ │道具│  │📋│  │
+│ ╰───╯  ╰──╯  │
+│              │
+│ [完整道具图]  │
+│              │
+│              │
+├──────────────┤
+│ 旧背包    ●8 │
+│ 🔗 小苏的    │
+└──────────────┘
 ```
 
-**特别设计：** "归属"用 🔗 + 文字明确标识，且**字色用 `nomi-accent`** 让它在卡片上跳出来——这是道具卡的核心差异化。
+**特别设计：** "归属"用 🔗 + 文字明确标识，**字色用 `nomi-accent`** 让它跳出来——这是道具卡的核心差异化。
 
 **规格表：**
 
 | 属性 | 值 / token |
 |---|---|
-| **尺寸** | 200 × 200 px（正方形）|
-| **外框** | 同前 |
-| **主图** | `flex-1 min-h-0 aspect-square rounded-nomi-sm` |
+| **宽度** | 200 px 固定 |
+| **图像区高度** | `200 / aspectRatio`；占位 1:1 → 200 |
+| **信息区高度** | 60 px 固定 |
+| **主图** | `w-full rounded-nomi-sm overflow-hidden`，`object-contain object-center` |
 | **名字** | `text-body` (14px) `font-medium` `text-nomi-ink` |
-| **归属** | `text-caption` (12px) `text-nomi-accent` `font-medium`，前置 🔗 icon (Tabler `IconLink` 12px) |
-| **使用次数** | 同前 |
-| **占位态** | 同前 |
-
-**降级：**
-- 没归属 → 隐藏归属行（不显示"无归属"）
-- 没图 → 占位斜条纹
+| **归属** | `text-caption` (12px) `text-nomi-accent` `font-medium`，前置 `IconLink` 12px |
+| **使用次数** | dot + 数字 `text-micro` |
+| **空状态** | 没归属 → **隐藏归属行**（不显示 "+ 添加归属" placeholder）|
 
 ### §4.4 `AudioStripNode`
 
-**视觉结构**（420 × 80）— **完全不同的横条范式**：
+**视觉结构**（420 × 80 固定，**没有图像**）：
 
 ```
 ┌───────────────────────────────────────────────┐
-│ [▶]  [BGM] 雨夜BGM           ⌒⌒⌒⌒⌒  03:42  │
-│      ●5 关联                                 │
+│ [▶]  [BGM] 雨夜BGM     ⌒⌒⌒⌒⌒  03:42  ●5    │
 └───────────────────────────────────────────────┘
 ```
 
-布局水平：左 [播放按钮] | 中左 [类型徽标 + 名字 + 关联] | 中右 [波形] | 右 [时长]
+布局水平：左 [播放按钮] | 中左 [类型徽标 + 名字] | 中右 [波形] | 右 [时长 + 使用次数]
 
 **规格表：**
 
 | 属性 | 值 / token |
 |---|---|
-| **尺寸** | 420 × 80 px（横向 strip）|
+| **尺寸** | 420 × 80 px 固定（无图，不参与 masonry）|
 | **外框** | `border border-nomi-line rounded-nomi-lg shadow-nomi-sm` |
-| **播放按钮** | 32×32 圆形按钮，`bg-nomi-ink text-nomi-paper`，IconPlay / IconPause |
-| **类型徽标** | `rounded-full bg-nomi-accent-soft text-nomi-accent text-micro px-2 py-[1px]`，文案 "BGM" / "音效" / "旁白" |
+| **播放按钮** | 32×32 圆形 `bg-nomi-ink text-nomi-paper`，IconPlay / IconPause |
+| **类型徽标** | `rounded-full bg-nomi-accent-soft text-nomi-accent text-micro px-2 py-[1px]`，文案 "BGM" / "音效" / "旁白"；audioKind 缺失时隐藏 |
 | **名字** | `text-body` (14px) `text-nomi-ink` |
-| **关联** | `text-micro text-nomi-ink-60`，dot + 数字 |
-| **波形** | 32px 高，占据中间区域，SVG 渲染。占位状态：`opacity-30` 灰条纹 |
-| **时长** | `text-caption text-nomi-ink-60 tabular-nums font-mono` |
-| **状态** | 播放中：播放按钮变 IconPause；波形 highlight 当前位置 |
+| **波形** | 32px 高 SVG。`audioKind` 没数据时显示灰条纹占位 |
+| **时长** | `text-caption text-nomi-ink-60 tabular-nums font-mono`；durationSec 缺失时显示 `--:--` |
+| **使用次数** | 同其它卡片，0 时隐藏 |
+| **状态** | 播放中：按钮 IconPause；波形 highlight 当前位置 |
 
-**v0.6 范围内不做的部分：**
-- 真实音频播放（需要 audio kind + Web Audio API）
-- 真实波形（需要预解析或 audio kind）
+**v0.7 不做：**
+- 真实音频播放（需要 audio kind 落地）
+- 真实波形分析
 - BPM / 音量峰值
-
-**v0.6 提供的：** 视觉骨架 + 占位 + 当数据存在时优雅渲染（`meta.audioKind`、`meta.durationSec`）
 
 ---
 
 ## §5 实施计划
 
-### §5.1 任务清单（沿用 `[E.2C-XX]` 风格 + DESIGN 前缀）
+### §5.1 任务清单
 
-| Task ID | 主题 | Wave | 工时估 |
-|---|---|---|---|
-| **[DESIGN-CARDS-01]** | meta 字段约定登记 + 类型注释（不改 schema） | 1 | 0.5 天 |
-| **[DESIGN-CARDS-02]** | 共享 hooks: `useNodeUsageCount` / `useNodeVariantCount` | 1 | 0.5 天 |
-| **[DESIGN-CARDS-03]** | `CharacterCardNode` 实现 | 2 | 0.5 天 |
-| **[DESIGN-CARDS-04]** | `SceneCardNode` 实现（含浮动信息条） | 2 | 0.5 天 |
-| **[DESIGN-CARDS-05]** | `PropCardNode` 实现 | 2 | 0.5 天 |
-| **[DESIGN-CARDS-06]** | `AudioStripNode` 实现（骨架，无真实音频） | 2 | 1 天 |
-| **[DESIGN-CARDS-07]** | BaseGenerationNode 改为 renderKind 分发器 | 3 | 1 天 |
-| **[DESIGN-CARDS-08]** | 默认 size 按 renderKind 决定 | 3 | 0.5 天 |
-| **[DESIGN-CARDS-09]** | 视觉回归（截屏每个分类） | 4 | 0.5 天 |
-| **[DESIGN-CARDS-10]** | 版本 bump 0.6.1 → 0.7.0 + release notes | 4 | - |
+| Task ID | 主题 | Wave |
+|---|---|---|
+| **[DESIGN-CARDS-01]** | meta 字段类型 + provenance helpers | 1 |
+| **[DESIGN-CARDS-02]** | `useNodeUsageCount` / `useNodeVariantCount` hooks | 1 |
+| **[DESIGN-CARDS-03]** | `CharacterCardNode` 实现（width-fixed + 完整图）| 2 |
+| **[DESIGN-CARDS-04]** | `SceneCardNode` 实现（含浮动信息条）| 2 |
+| **[DESIGN-CARDS-05]** | `PropCardNode` 实现 | 2 |
+| **[DESIGN-CARDS-06]** | `AudioStripNode` 实现（骨架）| 2 |
+| **[DESIGN-CARDS-07]** | BaseGenerationNode 改 renderKind 分发器 | 3 |
+| **[DESIGN-CARDS-08]** | 默认 size 按 renderKind + 图 aspect 决定 | 3 |
+| **[DESIGN-CARDS-09]** | `NewCardInlineForm` 组件（必填 name + 鼓励填字段）| 3 |
+| **[DESIGN-CARDS-10]** | 更新空状态 CTA 接入 inline form | 3 |
+| **[DESIGN-CARDS-11]** | AI extraction service（一次性剧本提取）| 4 |
+| **[DESIGN-CARDS-12]** | "从剧本同步" 按钮 + 结果预览 modal | 4 |
+| **[DESIGN-CARDS-13]** | 首次隐私确认 + 失败兜底 + 状态 toast | 4 |
+| **[DESIGN-CARDS-14]** | 版本 bump 0.6.1 → 0.7.0 + release notes | 5 |
+| **[DESIGN-CARDS-15]** | Final audit + spec compliance | 5 |
 
-总计 ~5 天。
+总计约 7–9 天。
 
-### §5.2 BaseGenerationNode dispatcher 模式
+### §5.2 BaseGenerationNode dispatcher
 
 ```typescript
-// pseudo-code
 function BaseGenerationNode({ node, ...rest }) {
   const renderKind = node.renderKind ?? inferFromCategoryId(node.categoryId)
-  
   switch (renderKind) {
     case 'shot-frame':     return <ShotFrameNode node={node} {...rest} />
     case 'character-card': return <CharacterCardNode node={node} {...rest} />
     case 'scene-card':     return <SceneCardNode node={node} {...rest} />
     case 'prop-card':      return <PropCardNode node={node} {...rest} />
     case 'audio-strip':    return <AudioStripNode node={node} {...rest} />
-    default:               return <ShotFrameNode node={node} {...rest} />  // 兜底
+    default:               return <ShotFrameNode node={node} {...rest} />
   }
 }
 ```
 
-**关键决定：** `ShotFrameNode` 不是新文件，而是**现有 BaseGenerationNode 的 body 整体移过去**（保留所有 1100+ 行功能：composer 内嵌、status badge、derived badge、resize、timeline drag 等）。其它 4 个新组件是从零写的简化版。
+`ShotFrameNode` = 现有 BaseGenerationNode 内容整体移过去（保留 composer 内嵌、status badge、derived badge、resize、timeline drag 等 1100+ 行功能）。其它 4 个新组件从零写简化版（仅图 + 信息区 + 计数）。
 
-### §5.3 共享 hooks 提取
+### §5.3 共享 hooks
 
 ```typescript
 // src/workbench/generationCanvasV2/hooks/useNodeRelationships.ts
@@ -466,8 +530,8 @@ function BaseGenerationNode({ node, ...rest }) {
 export function useNodeUsageCount(nodeId: string, nodeTitle: string | undefined): number {
   return useGenerationCanvasStore((state) => {
     if (!nodeTitle) return 0
-    return state.nodes.filter(n => 
-      n.categoryId === 'shots' && n.prompt?.includes(nodeTitle)
+    return state.nodes.filter(n =>
+      n.categoryId === 'shots' && n.id !== nodeId && n.prompt?.includes(nodeTitle)
     ).length
   })
 }
@@ -479,50 +543,255 @@ export function useNodeVariantCount(nodeId: string): number {
 }
 ```
 
-### §5.4 meta 字段约定（不改 schema）
+### §5.4 meta 字段类型与 provenance
 
-新建 `src/workbench/generationCanvasV2/model/nodeMetaFields.ts`：
+每个字段都附带 source 标记，便于 AI 重提时知道哪些是用户手填（不覆盖）。
 
 ```typescript
-/**
- * 各分类节点在 node.meta 里使用的可选字段。
- * 类型层面是 unknown（meta 的 Record 限制），运行时由 helper 函数收窄。
- */
+// src/workbench/generationCanvasV2/model/nodeMetaFields.ts
+
+export type FieldProvenance = 'user' | { ai: number /* timestamp */ }
+
 export type CharacterMeta = {
-  tagline?: string   // "反派少年，14 岁，有伤疤"
-  tags?: string[]    // ["反派", "少年"]
+  tagline?: string
+  taglineSource?: FieldProvenance
+  tags?: string[]
+  tagsSource?: FieldProvenance
 }
 
 export type SceneMeta = {
-  mood?: string[]    // ["夜", "雨", "冷色"]
+  mood?: string[]
+  moodSource?: FieldProvenance
+  tags?: string[]
+  tagsSource?: FieldProvenance
 }
 
 export type PropMeta = {
-  ownedBy?: string   // "小苏" 或 nodeId
+  ownedBy?: string
+  ownedBySource?: FieldProvenance
   attributes?: string[]
+  attributesSource?: FieldProvenance
 }
 
 export type AudioMeta = {
   audioKind?: 'bgm' | 'sfx' | 'vo'
+  audioKindSource?: FieldProvenance
   durationSec?: number
   bpm?: number
 }
 
+// helpers
 export function readCharacterMeta(node: GenerationCanvasNode): CharacterMeta {
   return (node.meta || {}) as CharacterMeta
 }
 // 同理 readSceneMeta / readPropMeta / readAudioMeta
+
+export function isUserEdited<T>(source: FieldProvenance | undefined): boolean {
+  return source === 'user'
+}
 ```
 
-写入这些字段的 UI（编辑器）**不在 v0.6 范围**——v0.6 只做"如果 meta 里有就显示，没有降级"。写入功能留给后续 phase。
+### §5.5 AI 提取服务
 
-### §5.5 兜底逻辑
+**单次 call 模型，结构化输出。**
 
-- 现有项目升级到 v0.7 后，所有现存节点的 `meta` 都是空的（除了原有的 result/history/...）
-- 卡片显示时全部降级（只显示名字 + 图）
-- 用户手动用 Cmd+E（如果有编辑面板）或未来通过 prompt 间接更新
+```typescript
+// src/workbench/cardsAi/extractCardsFromScript.ts
 
-**关键：v0.7 发版后，旧节点不会"看起来坏掉"——只是没有 tagline/mood/ownedBy，就少显示一行。**
+import { generateObject } from 'ai'
+import { z } from 'zod'
+
+const ExtractionResultSchema = z.object({
+  characters: z.array(z.object({
+    name: z.string(),
+    tagline: z.string().optional(),
+    tags: z.array(z.string()).optional(),
+  })),
+  scenes: z.array(z.object({
+    name: z.string(),
+    mood: z.array(z.string()).optional(),
+    tags: z.array(z.string()).optional(),
+  })),
+  props: z.array(z.object({
+    name: z.string(),
+    ownedBy: z.string().optional(),
+    attributes: z.array(z.string()).optional(),
+  })),
+  audio: z.array(z.object({
+    name: z.string(),
+    audioKind: z.enum(['bgm', 'sfx', 'vo']).optional(),
+  })),
+})
+
+export type ExtractionResult = z.infer<typeof ExtractionResultSchema>
+
+const SYSTEM_PROMPT = `你是一个影片创作助手。从用户给的剧本里提取所有实体并归类：
+
+- characters: 角色（人 / 拟人化形象）
+- scenes: 场景（地点 / 环境）
+- props: 重要道具（物品）
+- audio: 配乐 / 音效 / 旁白（"BGM"="bgm", "音效/SFX"="sfx", "旁白"="vo"）
+
+对每个实体提取：
+- name: 准确的实体名（中文优先，跟剧本里出现的一致）
+- tagline (角色): 一句话设定，<20 字
+- tags (角色/场景): 1-3 个关键词
+- mood (场景): 时段/氛围词，如 "夜"/"雨"/"冷色"
+- ownedBy (道具): 归属（角色名 / 场景名），剧本明示"X 的 Y"才填
+- attributes (道具): 视觉关键属性 1-3 个
+- audioKind (音频): 仅 bgm/sfx/vo
+
+只输出 JSON，不输出解释。不确定的字段不填。`
+
+export async function extractCardsFromScript(
+  script: string,
+  aiModel: LanguageModel,
+): Promise<ExtractionResult> {
+  const result = await generateObject({
+    model: aiModel,
+    schema: ExtractionResultSchema,
+    system: SYSTEM_PROMPT,
+    prompt: `剧本：\n\n${script}`,
+  })
+  return result.object
+}
+```
+
+**提取结果应用规则：**
+
+```typescript
+function applyExtractionToCard(
+  existingNode: GenerationCanvasNode,
+  extracted: { tagline?: string, tags?: string[] /* ... */ },
+  extractTimestamp: number,
+): Partial<GenerationCanvasNode> {
+  const meta = (existingNode.meta || {}) as CharacterMeta
+  const updates: Partial<CharacterMeta> = {}
+  
+  // tagline: 只在 source 不是 'user' 时覆盖
+  if (extracted.tagline && meta.taglineSource !== 'user') {
+    updates.tagline = extracted.tagline
+    updates.taglineSource = { ai: extractTimestamp }
+  }
+  // 同理 tags / mood / ownedBy / 等等
+  
+  return { meta: { ...meta, ...updates } }
+}
+```
+
+### §5.6 创建流程（3 种）
+
+**路径 1 — 从剧本同步（推荐主流程）**
+
+```
+触发：生成区 toolbar "从剧本同步" 按钮
+      （创作区无内容时按钮 disabled + tooltip "先在创作区写剧本"）
+      （AI provider 未配置时按钮 disabled + tooltip "先在设置接入 AI"）
+流程：
+  1. 首次触发 → 弹隐私确认（一次性，记住）
+  2. Loading: 读创作区 plaintext + call extractCardsFromScript
+  3. AI 返回后弹 ExtractionPreviewModal：
+     [✓] 创建 3 个角色: 小苏, 妈妈, 老师
+     [✓] 创建 2 个场景: 教室, 桥下
+     [✓] 更新 5 个已有卡片（小苏 +tagline, 教室 +mood, ...）
+     [取消]  [✓] 应用
+  4. 用户应用 → 一次性写入 store
+  5. Toast: "已同步 5 张新卡片 + 5 张更新"
+失败：
+  - AI 网络错 → toast 错误 + [重试] 按钮，不修改任何卡片
+  - JSON 格式错 → toast "AI 返回格式异常"
+```
+
+**路径 2 — 手动 inline 表单**
+
+```
+触发：sidebar 右键"+ 新建{分类}" 或 空状态 CTA
+组件：NewCardInlineForm（不弹 modal，画布上展开为待填卡片）
+字段：
+  - 名字 *（必填）
+  - 一句话设定（角色）/ 氛围（场景）/ 归属（道具）/ 类型（声音）—— 鼓励填
+  - 标签 —— 可选
+行为：
+  - Enter / 创建按钮 → 写入 store，source 标 'user'
+  - Esc / 取消按钮 → 见路径 3
+```
+
+**路径 3 — 取消表单 = 空白卡片（fallback）**
+
+```
+路径 2 表单按"取消"或留空 Enter：
+  - 仍创建一张卡片，仅有默认 title = "角色 N"
+  - 无 tagline / tags / 等其它元数据
+  - 用途：用户想立刻看到生成的效果，不在意元信息
+  - 卡片视觉：标题 pill + 图 + 使用次数（数据缺失行全部隐藏）
+后续可补：
+  - 用户点击卡片 → 进入编辑态修改 metadata（同路径 2 表单）
+  - 或写完剧本后用路径 1 批量提取，按名字匹配补字段
+```
+
+### §5.7 同步与冲突处理
+
+**首次同步：** AI 提取，全字段都 source='ai'
+
+**用户编辑某字段：** source='user'
+
+**第二次同步：**
+
+| 字段当前 source | AI 提取有值 | 行为 |
+|---|---|---|
+| 'user' | yes | **不覆盖**，保留用户值 |
+| 'user' | no | 保留用户值 |
+| { ai: ts } | yes | 覆盖（latest AI wins）|
+| { ai: ts } | no | 保留旧 AI 值（不清空，避免误删） |
+| undefined（空）| yes | 写入 |
+| undefined | no | 不动 |
+
+**重命名孤儿：** AI 提取的 entity 名匹配不到现有卡片 → 建新卡片。原同名旧卡片不删（可能仍有图）。
+
+**显式重提某字段：** UI 上字段右侧加 "↻" 按钮，点 = 把该字段 source 清空，下次同步 AI 写入。MVP 不做。
+
+### §5.8 隐私边界
+
+**首次同步前必弹一次性确认：**
+
+```
+┌─────────────────────────────────────────┐
+│ 从剧本同步                                │
+│                                         │
+│ 接下来会把创作区的剧本内容发送到 AI Provider │
+│ ({providerName})，用于自动提取角色/场景/   │
+│ 道具/声音信息填充卡片。                    │
+│                                         │
+│ 剧本会包含你的创作内容，请确认你接受这个    │
+│ 数据流动。                                 │
+│                                         │
+│ □ 不再提示                                 │
+│                                         │
+│           [取消]  [理解，继续]              │
+└─────────────────────────────────────────┘
+```
+
+用户勾"不再提示" + 确认 → 写入 `localStorage / settings.cardsAi.privacyAck = true`，后续不再弹。
+
+### §5.9 兜底逻辑（v0.6.1 → v0.7 升级）
+
+- 旧节点 meta 都是空的（仅有 result/history/...）
+- v0.7 打开后所有现存卡片只显示 image + title + 0 计数（其它行隐藏）
+- 用户可任选路径 1（一键同步）或路径 2（逐个填）补全
+- **关键：v0.7 升级**不会让旧节点"看起来坏掉"** —— 优雅降级
+
+### §5.10 失败兜底全表
+
+| 场景 | 行为 |
+|---|---|
+| AI provider 未配置 | "从剧本同步"按钮 disabled + tooltip |
+| 创作区为空 | 按钮 disabled + tooltip |
+| 网络失败 | toast "AI 调用失败 [重试]"，不修改 |
+| AI 返回非 JSON | toast "AI 响应格式异常"，不修改 |
+| AI 返回 JSON 但 schema 不符 | toast "AI 输出无法识别"，不修改 |
+| AI 提取 0 个 entity | toast "未找到可识别的角色/场景/道具" |
+| 用户取消预览 | 不修改 |
+| 剧本超长（>50k chars）| 弹提示 "剧本较长，可能需要 30s+"；超 200k 强制截断前 200k + 告知 |
 
 ---
 
