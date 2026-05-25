@@ -1,6 +1,7 @@
 import React from 'react'
 import { cn } from '../../utils/cn'
 import type { ProjectCategory } from '../project/projectCategories'
+import { getCategoryIcon } from './categoryIcons'
 
 type Props = {
   category: ProjectCategory
@@ -58,7 +59,10 @@ export default function CategoryItem({ category, count, active, collapsed, onAct
         collapsed && 'justify-center px-0',
       )}
     >
-      <span className="text-[16px] leading-none shrink-0" aria-hidden>{category.icon}</span>
+      {(() => {
+        const Icon = getCategoryIcon(category.iconName)
+        return <Icon size={16} stroke={1.5} className="shrink-0" aria-hidden />
+      })()}
       {collapsed ? (
         count > 0 ? (
           <span className="sr-only">{category.name} ({count})</span>
