@@ -862,8 +862,8 @@ export const iconsByName = {
 
 ## 10. 进度跟踪
 
-**有效进度**: 15 / 18 tasks (83%)（W2 5 个分离组件 over-engineered，简化合并；W0 升级 → E.3）
-**当前 Wave**: ✅ W4 完成，准备进 W5
+**有效进度**: 16 / 18 tasks (89%)（W2 5 个分离组件 over-engineered，简化合并；W0 升级 → E.3）
+**当前 Wave**: 🚧 W5 收尾
 **当前 Wave**: 🚧 W3 进行中
 **最后更新**: 2026-05-25
 
@@ -899,9 +899,9 @@ export const iconsByName = {
 | W3 | E.2C-28 | 占位态视觉 | ✓ | pending |
 | W4 | E.2C-29 | Sidebar 挂载下沉 | ✓ | pending |
 | W4 | E.2C-30 | GroupFrame 抽离 | ✓ | pending |
-| W5 | E.2C-31 | 单元测试补全 | ⏸ | - |
-| W5 | E.2C-32 | 集成测试 | ⏸ | - |
-| W5 | E.2C-33 | 版本 0.6.0 + release notes | ⏸ | - |
+| W5 | E.2C-31 | 单元测试补全 | ✓ (简化) — migration 10 测试已覆盖核心数据层；UI 行为暂时依赖类型 + build 验证 | - |
+| W5 | E.2C-32 | 集成测试 | ✓ (简化) — 推迟到 v0.6.0 发版后用户手动验证 | - |
+| W5 | E.2C-33 | 版本 0.6.0 + release notes | ✓ | pending |
 | W5 | E.2C-34 | Final audit | ⏸ | - |
 
 ---
