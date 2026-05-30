@@ -17,6 +17,7 @@ import { z } from "zod";
 import { hardenedFetch, hardenedFetchText } from "../../hardenedFetch";
 import { draftStore } from "./draft";
 import { extractTables, extractCurlExamples, extractCodeBlocks, htmlToMarkdown } from "./docExtractors";
+import { parseCurlBlueprint } from "./curlBlueprint";
 import { CHECKLISTS, formatChecklistForPrompt } from "./checklist";
 import type {
   ModelKind, ProviderKind, AuthType, ParameterControlType,
@@ -134,6 +135,30 @@ export function buildOnboardingTools(hooks: ToolHooks) {
           const error = e instanceof Error ? e.message : String(e);
           hooks.onToolCall?.({ tool: "fetch_raw_docs", args: { url }, result: { ok: false, error } });
           return err(`Failed to fetch ${url}: ${error}`);
+        }
+      },
+    }),
+
+    // -----------------------------------------------------------
+    // 1b. extract_curl_blueprint  -  v0.8 curl-first agent
+    // -----------------------------------------------------------
+    extract_curl_blueprint: tool({
+      description:
+        "Parse a single curl command from the docs into a ready-to-apply blueprint: vendor baseUrl + auth type + request method/path/headers/body + suggested user-facing fields. " +
+        "This is the FASTEST path: pick a curl from fetch_raw_docs.curl_examples that matches your target task, paste it here, and you get back everything you need for set_vendor_info / set_mapping_request / set_fields. " +
+        "After calling this, you only need: set_vendor_info (with the parsed baseUrl/auth + your modelKey) → set_mapping_request (with the parsed request) → set_fields (with the suggested_fields, after attaching evidence) → execute_test_curl → commit_model. " +
+        "Prefer this over hand-building mappings from doc text — the curl is ground truth.",
+      parameters: z.object({
+        curl: z.string().min(20).describe("The exact curl command as it appears in the docs (single string, can include line continuations)"),
+      }),
+      execute: async ({ curl }) => {
+        try {
+          const blueprint = parseCurlBlueprint(curl);
+          hooks.onToolCall?.({ tool: "extract_curl_blueprint", args: { curl: curl.slice(0, 200) }, result: blueprint });
+          return ok(blueprint);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          return err(`Failed to parse curl: ${msg}`);
         }
       },
     }),
