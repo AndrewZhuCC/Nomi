@@ -38,10 +38,20 @@ export function OnboardingFloatingPanel({ opened, onClose }: Props): JSX.Element
     if (!opened) return
     const handler = (e: MouseEvent) => {
       if (!panelRef.current) return
-      if (panelRef.current.contains(e.target as Node)) return
+      const target = e.target as Element | null
+      if (!target) return
+      // 点击在面板内 → 不关
+      if (panelRef.current.contains(target)) return
+      // 点击在 Mantine 浮层内（Modal / Drawer / Popover / Menu）→ 不关
+      // 这些组件用独立 Portal，渲染在 body 顶层，不在面板里
+      if (target.closest(
+        '.mantine-Modal-root, .mantine-Modal-overlay, .mantine-Modal-content,' +
+        '.mantine-Drawer-root, .mantine-Drawer-overlay,' +
+        '.mantine-Popover-dropdown, .mantine-Menu-dropdown, .mantine-Tooltip-tooltip,' +
+        '[role="dialog"]'
+      )) return
       onClose()
     }
-    // 延迟一帧绑定，避免触发"打开按钮"的同次 click 立刻关闭
     const id = window.requestAnimationFrame(() => {
       window.addEventListener('mousedown', handler)
     })
