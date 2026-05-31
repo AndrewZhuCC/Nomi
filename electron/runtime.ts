@@ -2020,6 +2020,12 @@ function templateContext(request: TaskRequest, model: Model, apiKey: string, pro
       account_key: apiKey,
       api_key: apiKey,
     },
+    // The onboarding subsystem (curlBlueprint / systemPrompt / tools) standardizes
+    // on `{{user_api_key}}` for the auth header, and its test-curl context provides
+    // it — so onboarded mappings pass the in-wizard test. Production must expose the
+    // SAME name or every onboarded mapping emits `Authorization: Bearer ` (empty) and
+    // 401s. `account.*` stays for older hand-authored mappings.
+    user_api_key: apiKey,
     providerMeta,
   };
 }
