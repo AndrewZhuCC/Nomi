@@ -81,6 +81,7 @@ export default function CanvasAssistantPanel({
   const [busy, setBusy] = React.useState(false)
   const [mode, setMode] = React.useState<'agent' | 'chat' | 'refine'>('agent')
   const [pendingToolCalls, setPendingToolCalls] = React.useState<PendingToolCall[]>([])
+  const threadBottomRef = React.useRef<HTMLDivElement | null>(null)
 
   const resolvePending = React.useCallback((
     toolCallId: string,
@@ -117,6 +118,14 @@ export default function CanvasAssistantPanel({
   React.useEffect(() => {
     onCollapsedChange?.(collapsed)
   }, [collapsed, onCollapsedChange])
+
+  // Keep the newest reply / pending plan card in view. Without this the
+  // thread stays scrolled to the top and a fresh reply (or a tool-call card)
+  // looks like it landed "above" the conversation.
+  React.useEffect(() => {
+    if (collapsed) return
+    threadBottomRef.current?.scrollIntoView({ block: 'end' })
+  }, [messages, pendingToolCalls, collapsed])
 
   const appendMessage = React.useCallback((message: { role: 'assistant' | 'user' | 'tool'; content: string }) => {
     setMessages((current) => [...current, { id: createMessageId(), ...message }])
@@ -378,73 +387,7 @@ export default function CanvasAssistantPanel({
         </div>
       </header>
       <div className={cn('flex flex-col gap-3 min-h-0 overflow-auto p-4')}>
-        {pendingToolCalls.length > 0 ? (() => {
-          // Aggregate consecutive create_canvas_nodes + connect_canvas_edges
-          // pairs into a single storyboard plan card; everything else falls
-          // back to the per-call confirmation list below.
-          const plan = summarizeAgentPlan(pendingToolCalls)
-          const planCallIds = new Set([plan?.createCallId, plan?.connectCallId].filter(Boolean) as string[])
-          const remaining = plan
-            ? pendingToolCalls.filter((call) => !planCallIds.has(call.toolCallId))
-            : pendingToolCalls
-          return (
-            <div className={cn('flex flex-col gap-3')}>
-              {plan ? (
-                <AgentPlanCard plan={plan} resolveCall={resolvePending} />
-              ) : null}
-              {remaining.length > 0 ? (
-                <div
-                  className={cn(
-                    'flex flex-col gap-2 p-3 rounded-nomi border border-nomi-accent-soft bg-nomi-accent-soft/40',
-                  )}
-                  data-pending-tool-calls="true"
-                  aria-label="待确认的 Agent 工具调用"
-                >
-                  <div className={cn('text-nomi-accent text-[12px] font-medium uppercase tracking-wider')}>
-                    Agent 准备调用工具
-                  </div>
-                  {remaining.map((call) => (
-              <div
-                key={call.toolCallId}
-                className={cn('flex flex-col gap-2 p-2 rounded-nomi-sm bg-nomi-paper border border-nomi-line-soft')}
-                data-tool-call-id={call.toolCallId}
-              >
-                <div className={cn('text-nomi-ink text-[13px] font-medium')}>{call.toolName}</div>
-                <div className={cn('text-nomi-ink-80 text-[12.5px]')}>{summarizeToolCall(call.toolName, call.args)}</div>
-                <details className={cn('text-nomi-ink-60 text-[11.5px]')}>
-                  <summary className={cn('cursor-pointer select-none')}>查看参数</summary>
-                  <pre className={cn('mt-1 max-h-[160px] overflow-auto p-2 rounded-nomi-sm bg-nomi-ink-05 text-[11px] leading-[1.4] whitespace-pre-wrap break-all')}>
-                    {JSON.stringify(call.args, null, 2)}
-                  </pre>
-                </details>
-                <div className={cn('flex items-center justify-end gap-2 mt-1')}>
-                  <WorkbenchButton
-                    className={cn(
-                      'h-7 px-3 rounded-nomi-sm border border-nomi-line bg-nomi-paper text-nomi-ink-80 text-[12px] cursor-pointer',
-                      'hover:bg-nomi-ink-05',
-                    )}
-                    onClick={() => resolvePending(call.toolCallId, { ok: false, message: 'rejected by user' })}
-                  >
-                    拒绝
-                  </WorkbenchButton>
-                  <WorkbenchButton
-                    className={cn(
-                      'h-7 px-3 rounded-nomi-sm border-0 bg-nomi-ink text-nomi-paper text-[12px] cursor-pointer',
-                      'hover:bg-nomi-accent',
-                    )}
-                    onClick={() => resolvePending(call.toolCallId, { ok: true, result: { confirmed: true } })}
-                  >
-                    确认
-                  </WorkbenchButton>
-                </div>
-              </div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          )
-        })() : null}
-        {messages.length === 0 ? (
+        {messages.length === 0 && pendingToolCalls.length === 0 ? (
           <div className={cn(
             'flex flex-1 flex-col items-center justify-center gap-[10px]',
             'max-w-[240px] mx-auto py-6 px-3 text-center',
@@ -492,6 +435,74 @@ export default function CanvasAssistantPanel({
             </div>
           ))
         )}
+        {pendingToolCalls.length > 0 ? (() => {
+          // Aggregate consecutive create_canvas_nodes + connect_canvas_edges
+          // pairs into a single storyboard plan card; everything else falls
+          // back to the per-call confirmation list below. Rendered at the
+          // BOTTOM of the thread so the latest plan sits with the latest reply.
+          const plan = summarizeAgentPlan(pendingToolCalls)
+          const planCallIds = new Set([plan?.createCallId, plan?.connectCallId].filter(Boolean) as string[])
+          const remaining = plan
+            ? pendingToolCalls.filter((call) => !planCallIds.has(call.toolCallId))
+            : pendingToolCalls
+          return (
+            <div className={cn('flex flex-col gap-3')}>
+              {plan ? (
+                <AgentPlanCard plan={plan} resolveCall={resolvePending} />
+              ) : null}
+              {remaining.length > 0 ? (
+                <div
+                  className={cn(
+                    'flex flex-col gap-2 p-3 rounded-nomi border border-nomi-accent-soft bg-nomi-accent-soft/40',
+                  )}
+                  data-pending-tool-calls="true"
+                  aria-label="待确认的 Agent 工具调用"
+                >
+                  <div className={cn('text-nomi-accent text-[12px] font-medium uppercase tracking-wider')}>
+                    Agent 准备调用工具
+                  </div>
+                  {remaining.map((call) => (
+                    <div
+                      key={call.toolCallId}
+                      className={cn('flex flex-col gap-2 p-2 rounded-nomi-sm bg-nomi-paper border border-nomi-line-soft')}
+                      data-tool-call-id={call.toolCallId}
+                    >
+                      <div className={cn('text-nomi-ink text-[13px] font-medium')}>{call.toolName}</div>
+                      <div className={cn('text-nomi-ink-80 text-[12.5px]')}>{summarizeToolCall(call.toolName, call.args)}</div>
+                      <details className={cn('text-nomi-ink-60 text-[11.5px]')}>
+                        <summary className={cn('cursor-pointer select-none')}>查看参数</summary>
+                        <pre className={cn('mt-1 max-h-[160px] overflow-auto p-2 rounded-nomi-sm bg-nomi-ink-05 text-[11px] leading-[1.4] whitespace-pre-wrap break-all')}>
+                          {JSON.stringify(call.args, null, 2)}
+                        </pre>
+                      </details>
+                      <div className={cn('flex items-center justify-end gap-2 mt-1')}>
+                        <WorkbenchButton
+                          className={cn(
+                            'h-7 px-3 rounded-nomi-sm border border-nomi-line bg-nomi-paper text-nomi-ink-80 text-[12px] cursor-pointer',
+                            'hover:bg-nomi-ink-05',
+                          )}
+                          onClick={() => resolvePending(call.toolCallId, { ok: false, message: 'rejected by user' })}
+                        >
+                          拒绝
+                        </WorkbenchButton>
+                        <WorkbenchButton
+                          className={cn(
+                            'h-7 px-3 rounded-nomi-sm border-0 bg-nomi-ink text-nomi-paper text-[12px] cursor-pointer',
+                            'hover:bg-nomi-accent',
+                          )}
+                          onClick={() => resolvePending(call.toolCallId, { ok: true, result: { confirmed: true } })}
+                        >
+                          确认
+                        </WorkbenchButton>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )
+        })() : null}
+        <div ref={threadBottomRef} aria-hidden="true" />
       </div>
       <form
         className={cn('grid gap-1 p-3 border-t border-nomi-line-soft bg-nomi-paper')}
