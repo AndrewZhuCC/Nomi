@@ -1,6 +1,22 @@
 # 画布：素材节点（≠生成节点）+ A1.5 组件抽取
 
-> 状态：已拍板 A1.5，开始执行
+> 状态：✅ 已完成（A1.5 step 1–6 全部落地，tsc/build/test 全绿）
+
+## 执行结果（回填 2026-06-01）
+
+| 步 | commit | 内容 |
+|---|---|---|
+| 1 | `4c88978` | 抽 `NodeGenerationComposer`（composer + 生成依赖出壳）|
+| 2 | `b9ce044` | 抽 `useNodeImageEditing` hook + `NodeImageEditToolbar`（图片工具条/handler/canvas 辅助出壳；3 个 handler 直接产 `asset`）|
+| 3 | `4792969` | registry 加 `asset` 插件；壳 `isAssetKind`→ 关 composer、强制 `renderKind=undefined`、image∨asset 才挂工具条/crop overlay |
+| 4 | `464cbac` | 素材创建路径产 `asset`：assetImportAdapter / 文件树拖入 / 全景截图（空状态 CTA 保持 `image`，它是新建生成节点）|
+| 5 | `9770744` | `normalizeLegacyImageAssetKinds` 进 hydrate 链 + vitest（导入/切图/裁剪→asset，真生成图保持 image）|
+| 6 | — | tsc 0 错；build 过；test 402 passed +1 todo；grep 无残留素材 `kind:'image'` 路径 |
+
+剩余非测试 `kind:'image'` 均为合法生成路径：registry 的 image 插件定义、空状态 CTA、种子默认画布节点。验收门 1–6 全过。
+
+---
+
 > 触发：①画布上"什么都是生成卡片"——导入图、裁出来的图不该有提示词/参数/重新生成（噪音，规则2）；②拖拽卡顿（见 §2 更正）。
 
 ## 1. 用户价值
