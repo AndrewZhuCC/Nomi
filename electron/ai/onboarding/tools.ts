@@ -262,6 +262,31 @@ export function buildOnboardingTools(hooks: ToolHooks) {
     }),
 
     // -----------------------------------------------------------
+    // 2b. set_model_kind  -  declare what this model produces.
+    // Without this the catalog kind defaulted to "image", so every
+    // video/audio model was mis-filed as image (and the canvas built
+    // image controls + the wrong taskKind mapping). The agent reads the
+    // docs and declares the real kind here.
+    // -----------------------------------------------------------
+    set_model_kind: tool({
+      description:
+        "Declare what this model PRODUCES, based on the docs you read. " +
+        "'image' (text→image, image edit), 'video' (text→video, image→video; look for duration/fps/resolution params or 'video' in the endpoint), " +
+        "'audio' (text→speech, music), 'text' (chat/LLM). " +
+        "Call this once, right after set_vendor_info. Getting it wrong files the model in the wrong place in the canvas.",
+      parameters: z.object({
+        kind: z.enum(["text", "image", "video", "audio"]),
+        evidence: z.string().min(20, "Quote >=20 chars of the doc that shows what this model outputs"),
+      }),
+      execute: async ({ kind, evidence }) => {
+        draftStore.patch(sessionId, { targetKind: kind });
+        const result = ok({ kind });
+        hooks.onToolCall?.({ tool: "set_model_kind", args: { kind, evidence }, result });
+        return result;
+      },
+    }),
+
+    // -----------------------------------------------------------
     // 5a. set_fields  -  M4.1: BATCH version, ALWAYS prefer this
     // -----------------------------------------------------------
     set_fields: tool({

@@ -391,6 +391,19 @@ function explicitVideoCatalogControls(config: VideoModelCatalogConfig | null): D
   })
 }
 
+// A free-form text/number control with no options, no default, and no
+// placeholder renders as an empty input box that carries no information and
+// no action value (e.g. kie's `callBackUrl` plumbing param). Drop it from the
+// node toolbar — boolean/select controls and anything with a default/options
+// stay. (Rule 2: 没有行动价值的信息 = 噪音 = 删)
+function isEmptyInputControl(control: ModelParameterControl): boolean {
+  if (control.type !== 'text' && control.type !== 'number') return false
+  if (control.options.length > 0) return false
+  const hasDefault = typeof control.defaultValue !== 'undefined' && String(control.defaultValue).trim() !== ''
+  const hasPlaceholder = typeof control.placeholder === 'string' && control.placeholder.trim() !== ''
+  return !hasDefault && !hasPlaceholder
+}
+
 function dedupeParamControls(controls: ModelParameterControl[]): ModelParameterControl[] {
   const usedKeys = new Set<string>()
   return controls.filter((control) => {
@@ -409,7 +422,7 @@ function buildDynamicControls(input: {
   isVideoLike: boolean
 }): DynamicModelControl[] {
   const paramControls = dedupeParamControls(
-    input.parameterControls.filter((c) => c.type !== 'image-url'),
+    input.parameterControls.filter((c) => c.type !== 'image-url' && !isEmptyInputControl(c)),
   )
   const controls: DynamicModelControl[] = paramControls.map((control) => ({
     ...control,

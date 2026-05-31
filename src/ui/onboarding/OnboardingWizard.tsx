@@ -37,6 +37,7 @@ const INITIAL_MILESTONES: Milestone[] = [
 
 const MILESTONE_BY_TOOL: Record<string, Milestone['id']> = {
   fetch_raw_docs: 'read',
+  set_model_kind: 'kind',
   set_vendor_info: 'identity',
   set_fields: 'fields',
   add_field_with_evidence: 'fields',
@@ -130,14 +131,14 @@ export function OnboardingWizard({ opened, onClose, onCommitted }: {
       if (milestoneId) {
         setMilestones(prev => markStatus(prev, milestoneId, ok ? 'done' : 'failed'))
       }
-      // Side-effects: pick up field count, detected kind from set_fields/set_vendor_info results.
+      // Side-effects: pick up field count, detected kind from set_fields/set_model_kind results.
       if (ev.toolName === 'set_fields' && ok) {
         const total = Number(result?.value?.totalFields || 0)
         setFieldsCount(total)
       }
-      if (ev.toolName === 'set_vendor_info' && ok) {
-        // The agent can't yet declare kind separately; we leave detectedKind null
-        // until we ship set_model_kind. UI just skips the "识别类型" detail line then.
+      if (ev.toolName === 'set_model_kind' && ok) {
+        const kind = result?.value?.kind
+        if (typeof kind === 'string') setDetectedKind(kind)
       }
     }
     if (ev.type === 'trial-end') {

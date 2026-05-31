@@ -1043,7 +1043,7 @@ function BaseGenerationNodeImpl({ node, selected, readOnly = false, focusFlash =
           ) : (
             <img
               className={cn(
-                'w-full h-full min-h-0 object-cover pointer-events-none',
+                'w-full h-full min-h-0 object-contain pointer-events-none',
                 'select-none',
               )}
               src={node.result.url}

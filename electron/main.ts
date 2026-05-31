@@ -395,7 +395,7 @@ function registerOnboardingIpc(): void {
       void runOnboardingTrial({
         trialId,
         docsUrl,
-        targetKind: targetKind ?? ("image" as ModelKind), // fallback until set_model_kind tool lands
+        targetKind: targetKind ?? ("image" as ModelKind), // initial seed; the agent overrides it via set_model_kind after reading the docs
         userApiKey,
         agent,
         // Async APIs legitimately need ~11 tool calls (create + query stage),
