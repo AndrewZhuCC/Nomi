@@ -43,7 +43,7 @@ const HTTP_METHODS = ["get", "post", "put", "patch", "delete"] as const;
 // This list is intentionally limited to fields that are NEVER generation params
 // on ANY provider — we'd rather keep a borderline param than drop a real one.
 const WIRING_KEY =
-  /^(model|api[-_]?key|apikey|token|secret|user_token|authorization|stream|callback|callback[-_]?url|webhook|webhooks|webhook[-_]?events?[-_]?filter|id|status|error|logs|metrics|urls|created[-_]?at|updated[-_]?at|completed[-_]?at|started[-_]?at|deployment|version)$/i;
+  /^(model|api[-_]?key|apikey|token|secret|user_token|authorization|stream|callback|callback[-_]?url|webhook|webhooks|webhook[-_]?events?[-_]?filter|id|status|error|logs|metrics|urls|created[-_]?at|updated[-_]?at|completed[-_]?at|started[-_]?at|deployment|version|context|output[-_]?file[-_]?prefix)$/i;
 
 function isObj(v: unknown): v is JsonObj {
   return !!v && typeof v === "object" && !Array.isArray(v);
@@ -116,7 +116,11 @@ function findOpenApiRoots(html: string): JsonObj[] {
   const roots: JsonObj[] = [];
   const seen = new Set<string>();
   const push = (root: JsonObj) => {
-    const sig = `${Object.keys(root.paths as JsonObj).join(",")}`;
+    // Content-aware signature: keys alone would drop a RICHER second embedding
+    // of the same paths (Replicate renders the spec twice). Include a size
+    // fingerprint so distinct embeddings survive; op-level dedupe keeps the
+    // richer one. Only byte-identical embeddings collapse here.
+    const sig = `${Object.keys(root.paths as JsonObj).join(",")}:${JSON.stringify(root.paths).length}`;
     if (seen.has(sig)) return;
     seen.add(sig);
     roots.push(root);
@@ -336,7 +340,16 @@ export function extractOpenApiOperations(html: string): DocOperation[] {
       }
     }
   }
-  return ops;
+  // Dedupe by method+path. A page can embed the same spec twice (e.g. Replicate
+  // renders it in both a <script> and inline), yielding two ops for one path —
+  // confusing for the agent. Keep the richer one (more fields).
+  const byKey = new Map<string, DocOperation>();
+  for (const op of ops) {
+    const key = `${op.method} ${op.path}`;
+    const prev = byKey.get(key);
+    if (!prev || op.fields.length > prev.fields.length) byKey.set(key, op);
+  }
+  return [...byKey.values()];
 }
 
 // =================================================================

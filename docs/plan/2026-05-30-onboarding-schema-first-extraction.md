@@ -109,8 +109,33 @@ v1 上线后真机重跑 kie GPT Image-2,仍 `partial`、参数只有 `aspect_ra
 
 > 注：`recordInfo is null` 422 是上一轮 **partial 模型**遗留的 query 阶段问题（URL 没带 `?taskId=`），依赖一次干净 re-onboard 才能拿到新 trace 定位；不在本次盲改范围。
 
+## 5e. 9 文档跨平台真机抽取扫描（同日，`scripts/probe-extract-matrix.ts`）
+
+为回答「到底修完没有」，对 9 个**真实**中转站文档 live-fetch HTML、跑全套确定性抽取器（agent 在 `fetch_raw_docs` 里看到的一模一样），不跑 LLM、不花钱：
+
+| 文档 | HTML | 走哪条路 | 抽到的参数 | 评 |
+|---|---|---|---|---|
+| kie GPT Image-2 (image) | 379KB | 去水化 | aspect_ratio[16], resolution[3] | ✅ |
+| kie Seedance v1-pro (video) | 383KB | 去水化 | aspect_ratio[6], resolution[3], duration[2] | ✅ 视频参数泛化 |
+| kie Grok-imagine t2v | 381KB | 去水化 | resolution[2] | ✅ x-apidog 截断正确（该模型枚举参数本就少）|
+| kie Seedream v4 (image) | 386KB | 去水化 | image_size[9] | ✅ 词表泛化（非 aspect_ratio）|
+| kie Z-Image (image) | 384KB | 去水化 | aspect_ratio[5] | ✅ |
+| Replicate veo-3 | 106KB | OpenAPI | seed,image,prompt,duration[3],resolution[2],aspect_ratio[2],generate_audio,negative_prompt | ✅ |
+| Replicate flux-pro | 142KB | OpenAPI | seed,width,height,prompt,aspect_ratio[10],image_prompt,output_format[3],output_quality,safety_tolerance,prompt_upsampling | ✅ |
+| **kie Hailuo 02 t2v** | 383KB | curl 兜底 | — | ⚠️ spec **懒加载**，HTML 里 0 个参数 token（0 snake_case、0 枚举串）|
+| **fal.ai flux-pro** | 333KB | digest 兜底 | — | ⚠️ Next/RSC，spec 不在初始 HTML |
+
+**本轮发现并修（均通用，带测试）:**
+- Replicate `context`（nullable object 信封）+ `output_file_prefix`（平台输出命名，每个模型都有、从不是生成参数）混进参数 → 扩 `WIRING_KEY` denylist。
+- Replicate 同一 `/predictions` 被抽出**两次**（页面把 spec 渲染在 `<script>` + inline 两处）→ (a) `findOpenApiRoots` 的 root 签名从「仅 path keys」改为「path keys + 大小指纹」，否则更全的第二份会被误当重复丢掉；(b) `extractOpenApiOperations` 末尾按 method+path 去重、保留字段更多的那份。
+- 测试 +3（context/output_file_prefix 过滤、richer-op 去重）。304 测试全绿。
+
+**结论（诚实版）:** 7/9 文档参数抽取完美泛化（kie 去水化 5 个 + Replicate OpenAPI 2 个）。**2/9（Hailuo、fal.ai）的 spec 根本不在服务端 HTML 里**（懒加载/RSC），不是 parser bug——字节不在，没法解析。这正是 R2（跟随链接抓真 spec 端点）要解决的，是独立的一块工作，不在本轮。
+
+> 方法论沉淀：`probe-extract-matrix.ts` 是这个反复出问题领域的离线回归台——以后加平台/改 parser，先对它跑一遍，不用每次真机烧钱跑 agent。
+
 ## 6. 后续（不在本轮）
 
 - ~~把 spec-only 参数合并进请求 body 模板~~（已在 5d 完成）。
-- R2 增强：跟随链接抓外部 `openapi.json`。
+- **R2（已升为最高优先，是当前唯一已知 gap）**：Hailuo/fal.ai 这类懒加载 SPA，spec 不在初始 HTML。需跟随页面里的 spec 端点（Apidog 的 detail XHR / fal 的 RSC chunk / 外部 `openapi.json`）二次抓取。
 - R3 探针：对仍为空的 enum 发非法值，从 4xx 错误回显补全。

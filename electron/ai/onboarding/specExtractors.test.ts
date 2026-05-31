@@ -101,6 +101,57 @@ describe("extractOpenApiOperations — deterministic OpenAPI parse", () => {
     expect(ops.length).toBe(1);
     expect(ops[0].fields.map((f) => f.key)).toContain("aspect_ratio");
   });
+
+  it("drops Replicate envelope/output-wiring keys (context, output_file_prefix)", () => {
+    // Real Replicate /predictions schema mixes generation params with platform
+    // wiring: `context` (nullable object) and `output_file_prefix` ride on every
+    // model regardless of generation semantics — they must not become node params.
+    const repl = {
+      openapi: "3.0.0",
+      paths: {
+        "/predictions": {
+          post: {
+            requestBody: {
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      prompt: { type: "string" },
+                      aspect_ratio: { type: "string", enum: ["1:1", "16:9"] },
+                      context: { type: "object", nullable: true },
+                      output_file_prefix: { type: "string", nullable: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+    const html = `<script type="application/json">${JSON.stringify(repl)}</script>`;
+    const keys = extractOpenApiOperations(html)[0].fields.map((f) => f.key);
+    expect(keys).toContain("prompt");
+    expect(keys).toContain("aspect_ratio");
+    expect(keys).not.toContain("context");
+    expect(keys).not.toContain("output_file_prefix");
+  });
+
+  it("dedupes the same method+path emitted twice, keeping the richer op", () => {
+    // A page can embed the same spec twice (Replicate: <script> + inline), each
+    // slightly different. We must not surface two ops for one path.
+    const mk = (props: Record<string, unknown>) => ({
+      openapi: "3.0.0",
+      paths: { "/predictions": { post: { requestBody: { content: { "application/json": { schema: { type: "object", properties: props } } } } } } },
+    });
+    const lean = mk({ prompt: { type: "string" } });
+    const rich = mk({ prompt: { type: "string" }, aspect_ratio: { type: "string", enum: ["1:1", "16:9"] } });
+    const html = `<script type="application/json">${JSON.stringify(lean)}</script><script type="application/json">${JSON.stringify(rich)}</script>`;
+    const ops = extractOpenApiOperations(html);
+    expect(ops.length).toBe(1);
+    expect(ops[0].fields.map((f) => f.key)).toContain("aspect_ratio"); // kept the richer
+  });
 });
 
 describe("extractDehydratedParameters — structured Apidog-store recovery", () => {
