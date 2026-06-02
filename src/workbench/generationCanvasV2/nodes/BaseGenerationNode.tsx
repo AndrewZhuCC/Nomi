@@ -5,7 +5,6 @@ import {
     IconInfoCircle,
     IconLayoutGrid,
     IconMaximize,
-    IconSchema,
     IconUpload,
 } from "@tabler/icons-react";
 import ProvenancePanel from "./ProvenancePanel";
@@ -38,7 +37,6 @@ import {
 } from "../../../media/videoPlaybackDiagnostics";
 import PanoramaViewer, { type PanoramaScreenshot } from "./PanoramaViewer";
 import { getGenerationNodeExecutionKind } from "../model/generationNodeKinds";
-import { createEmptySemanticScene } from "./semanticScene/semanticSceneSerializer";
 import {
     canDragGenerationNodeToTimeline,
     TIMELINE_DRAG_HANDLE_LABEL,
@@ -75,7 +73,6 @@ const MIN_NODE_HEIGHT = 120;
 const MAX_NODE_HEIGHT = 520;
 const TIMELINE_TRACK_CLIPS_SELECTOR = ".workbench-timeline-track__clips";
 const Scene3DEditor = React.lazy(() => import("./Scene3DEditor"));
-const SemanticSceneNode = React.lazy(() => import("./SemanticSceneNode"));
 
 function Scene3DEditorLoading(): JSX.Element {
     return (
@@ -88,16 +85,6 @@ function Scene3DEditorLoading(): JSX.Element {
     );
 }
 
-function SemanticSceneNodeLoading(): JSX.Element {
-    return (
-        <div
-            className={cn(
-                "flex w-full h-full items-center justify-center bg-nomi-ink-05 text-[12px] text-nomi-ink-45",
-            )}>
-            语义场景加载中
-        </div>
-    );
-}
 const FOCUS_GENERATION_NODE_EVENT = "nomi-focus-generation-node";
 
 function clampNumber(value: number, min: number, max: number): number {
@@ -790,51 +777,6 @@ function BaseGenerationNodeImpl({
               ? `独立副本（来自 ${sourceNodeLabel}）`
               : "独立副本（源节点已不存在）";
     const nodeExecutionKind = getGenerationNodeExecutionKind(node.kind);
-    const handleCreateSemanticSceneFromPanorama = React.useCallback(() => {
-        const sourceUrl =
-            node.result?.url ||
-            (typeof node.meta?.imageUrl === "string" ? node.meta.imageUrl : "");
-        if (!sourceUrl) return;
-        const semanticScene = createEmptySemanticScene({
-            sourceType: "panorama",
-            sourceNodeId: node.id,
-            sourceImageUrls: [sourceUrl],
-            scaleHint:
-                typeof node.meta?.scaleHint === "string"
-                    ? node.meta.scaleHint
-                    : undefined,
-        });
-        const semanticNode = addNode({
-            kind: "semanticScene",
-            title: `${node.title || "全景图"} 语义场景`,
-            prompt: "从全景图提取建筑或开放环境语义：空间、边界、表面、开口、物体、光照和相机。",
-            position: {
-                x: Math.round(node.position.x + visualSize.width + 80),
-                y: Math.round(node.position.y),
-            },
-        });
-        updateNode(semanticNode.id, {
-            meta: {
-                ...(semanticNode.meta || {}),
-                source: "panorama-semantic-scene",
-                sourceNodeId: node.id,
-                semanticScene,
-            },
-        });
-        storeConnectNodes(node.id, semanticNode.id, "reference");
-    }, [
-        addNode,
-        node.id,
-        node.meta?.imageUrl,
-        node.meta?.scaleHint,
-        node.position.x,
-        node.position.y,
-        node.result?.url,
-        node.title,
-        storeConnectNodes,
-        updateNode,
-        visualSize.width,
-    ]);
     const handlePanoramaScreenshot = React.useCallback(
         (screenshot: PanoramaScreenshot) => {
             const { dataUrl, dimensions } = screenshot;
@@ -997,19 +939,6 @@ function BaseGenerationNodeImpl({
                     role='toolbar'
                     aria-label='全景图操作'
                     onPointerDown={(event) => event.stopPropagation()}>
-                    <button
-                        className={cn(
-                            "inline-flex items-center justify-center gap-[7px]",
-                            "min-w-0 min-h-[34px] px-[11px] border-0 rounded-[9px]",
-                            "bg-transparent text-nomi-ink-80 font-[inherit] text-[13px] leading-none whitespace-nowrap cursor-pointer",
-                            "hover:bg-nomi-ink-05 hover:text-nomi-ink",
-                        )}
-                        type='button'
-                        title='创建语义场景节点'
-                        onClick={handleCreateSemanticSceneFromPanorama}>
-                        <IconSchema size={16} stroke={1.8} />
-                        <span>语义场景</span>
-                    </button>
                     <button
                         className={cn(
                             "inline-flex items-center justify-center gap-[7px]",
@@ -1185,17 +1114,7 @@ function BaseGenerationNodeImpl({
                 )}
                 data-timeline-draggable={canSendToTimeline ? "true" : "false"}
                 draggable={false}>
-                {node.kind === "semanticScene" ? (
-                    <React.Suspense fallback={<SemanticSceneNodeLoading />}>
-                        <SemanticSceneNode
-                            node={node}
-                            selected={selected}
-                            width={visualSize.width}
-                            height={previewHeight}
-                            readOnly={readOnly}
-                        />
-                    </React.Suspense>
-                ) : node.kind === "scene3d" ? (
+                {node.kind === "scene3d" ? (
                     <React.Suspense fallback={<Scene3DEditorLoading />}>
                         <Scene3DEditor
                             node={node}
@@ -1325,9 +1244,7 @@ function BaseGenerationNodeImpl({
                 ) : null}
             </div>
 
-            {canSendToTimeline &&
-            node.kind !== "semanticScene" &&
-            node.kind !== "scene3d" ? (
+            {canSendToTimeline && node.kind !== "scene3d" ? (
                 <div
                     role='button'
                     tabIndex={0}
@@ -1377,6 +1294,7 @@ function BaseGenerationNodeImpl({
             {selected &&
             !readOnly &&
             node.kind !== "panorama" &&
+            node.kind !== "scene3d" &&
             !isAssetKind ? (
                 <NodeGenerationComposer node={node} visualSize={visualSize} />
             ) : null}

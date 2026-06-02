@@ -3654,7 +3654,7 @@ function CameraPreview({
             )}
             disabled={readOnly}
             type="button"
-            title={cameraViewEditing ? '退出取景调整' : '从相机视角调整'}
+            title={cameraViewEditing ? '正在取景调整，按 Esc 或点击顶部退出' : '从相机视角调整'}
             onClick={onToggleViewEdit}
           >
             <IconEye size={14} />
@@ -3830,9 +3830,6 @@ export default function Scene3DFullscreen({
 
   const selectSceneItem = React.useCallback((nextSelection: Scene3DSelection) => {
     setSelection(nextSelection)
-    setCameraViewEditId((current) => (
-      nextSelection?.type === 'camera' && nextSelection.id === current ? current : null
-    ))
     setViewLocked(false)
     setFocusId('')
   }, [])
@@ -3840,16 +3837,15 @@ export default function Scene3DFullscreen({
   const clearSelection = React.useCallback(() => {
     if (suppressCanvasMissedSelectionRef.current) return
     setSelection(null)
-    setCameraViewEditId(null)
     setViewLocked(false)
     setFocusId('')
   }, [])
 
   const focusSceneItem = React.useCallback((id: string) => {
-    setCameraViewEditId(null)
+    if (cameraViewEditId) return
     setViewLocked(true)
     setFocusId(`${id}:${Date.now()}`)
-  }, [])
+  }, [cameraViewEditId])
 
   const patchObject = React.useCallback((id: string, patch: Partial<Scene3DObject>) => {
     setState((current) => ({
@@ -4135,11 +4131,10 @@ export default function Scene3DFullscreen({
   const toggleCameraViewEdit = React.useCallback(() => {
     if (!selectedCamera || readOnly) return
     if (cameraViewEditId === selectedCamera.id) {
-      exitCameraViewEdit()
       return
     }
     enterCameraViewEdit(selectedCamera)
-  }, [cameraViewEditId, enterCameraViewEdit, exitCameraViewEdit, readOnly, selectedCamera])
+  }, [cameraViewEditId, enterCameraViewEdit, readOnly, selectedCamera])
 
   const levelSelectedCamera = React.useCallback(() => {
     if (!selectedCamera || readOnly) return

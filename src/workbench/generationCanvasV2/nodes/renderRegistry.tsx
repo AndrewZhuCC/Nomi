@@ -6,7 +6,6 @@ import {
   IconFlag,
   IconLayoutGrid,
   IconPhoto,
-  IconSchema,
   IconUser,
   IconVideo,
   IconWriting,
@@ -39,7 +38,6 @@ const NODE_ICONS: Record<GenerationNodeIconKey, GenerationNodeIcon> = {
   shot: IconBoxMultiple,
   output: IconFlag,
   panorama: Icon360,
-  semanticScene: IconSchema,
   scene3d: IconCube,
 }
 
