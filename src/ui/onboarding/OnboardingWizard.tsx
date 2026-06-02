@@ -14,10 +14,11 @@
  * Auto-commits to catalog on success (the IPC handler does it).
  */
 import React from 'react'
-import { Stack, Group, Text, PasswordInput, ActionIcon, Anchor, SegmentedControl } from '@mantine/core'
+import { Stack, Group, Text, PasswordInput, ActionIcon, Anchor, SegmentedControl, TagsInput, Chip } from '@mantine/core'
 import { IconPlus, IconTrash } from '@tabler/icons-react'
 import { DesignButton, DesignModal, DesignTextInput } from '../../design'
 import { getDesktopBridge } from '../../desktop/bridge'
+import { PROVIDER_PRESETS } from './providerPresets'
 
 type Phase = 'input' | 'running' | 'success' | 'error'
 
@@ -65,11 +66,20 @@ export function OnboardingWizard({ opened, onClose, onCommitted }: {
   const [userApiKey, setUserApiKey] = React.useState('')
   // manual-form state
   const [vendorName, setVendorName] = React.useState('')
-  // Endpoint shape: 'openai-compatible' (default; Ollama/OpenAI/Kimi/智谱/中转站)
+  // Selected provider preset ('' = none yet). Drives auto-fill + whether to show
+  // the 接口类型 toggle (only for custom/none — named presets imply their type).
+  const [presetId, setPresetId] = React.useState('')
+  // Endpoint shape: 'openai-compatible' (default; OpenAI/Kimi/智谱/DeepSeek/中转站)
   // or 'anthropic' (Claude's native /v1/messages — x-api-key, different body).
   const [providerKind, setProviderKind] = React.useState<'openai-compatible' | 'anthropic'>('openai-compatible')
   const [baseUrl, setBaseUrl] = React.useState('')
-  const [models, setModels] = React.useState<Array<{ id: string; displayName: string }>>([{ id: '', displayName: '' }])
+  // Model ids only (display name dropped — it defaulted to the id, nobody filled it).
+  // Entered via TagsInput: type+enter for any endpoint, or pick from auto-fetched list.
+  const [models, setModels] = React.useState<string[]>([])
+  // Auto-fetched model ids (GET /models) used as TagsInput autocomplete suggestions.
+  const [fetchedModels, setFetchedModels] = React.useState<string[]>([])
+  const [fetchingModels, setFetchingModels] = React.useState(false)
+  const [fetchModelsMsg, setFetchModelsMsg] = React.useState('')
   // Custom request headers (key/value) for relay/proxy gateways. Empty by default
   // so the common case stays clean; the "添加请求头" button reveals a row on demand.
   const [headerRows, setHeaderRows] = React.useState<Array<{ key: string; value: string }>>([])
@@ -106,20 +116,10 @@ export function OnboardingWizard({ opened, onClose, onCommitted }: {
     setErrorHint('')
     setTraceJson(null)
     // Keep credentials (vendorName/baseUrl/userApiKey) so "再添加一个" under the
-    // same endpoint is one step; only clear the per-add model rows + test result.
-    setModels([{ id: '', displayName: '' }])
+    // same endpoint is one step; only clear the per-add model picks + test result.
+    setModels([])
     setTestState('idle')
     setTestMessage('')
-  }, [])
-
-  const updateModel = React.useCallback((index: number, patch: Partial<{ id: string; displayName: string }>) => {
-    setModels(prev => prev.map((m, i) => (i === index ? { ...m, ...patch } : m)))
-  }, [])
-  const addModelRow = React.useCallback(() => {
-    setModels(prev => [...prev, { id: '', displayName: '' }])
-  }, [])
-  const removeModelRow = React.useCallback((index: number) => {
-    setModels(prev => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)))
   }, [])
 
   const updateHeader = React.useCallback((index: number, patch: Partial<{ key: string; value: string }>) => {
@@ -144,11 +144,50 @@ export function OnboardingWizard({ opened, onClose, onCommitted }: {
     return out
   }, [headerRows])
 
+  const handlePickPreset = React.useCallback((id: string) => {
+    const preset = PROVIDER_PRESETS.find(p => p.id === id)
+    if (!preset) return
+    setPresetId(id)
+    setProviderKind(preset.providerKind)
+    setBaseUrl(preset.baseUrl)
+    setVendorName(preset.custom ? '' : preset.label)
+    // Endpoint changed → previously fetched models / test result no longer apply.
+    setFetchedModels([])
+    setFetchModelsMsg('')
+    setTestState('idle')
+  }, [])
+
+  const handleFetchModels = React.useCallback(async () => {
+    if (!bridge?.onboarding?.listModels) return
+    setFetchingModels(true)
+    setFetchModelsMsg('')
+    try {
+      const res = await bridge.onboarding.listModels({
+        baseUrl: baseUrl.trim(),
+        apiKey: userApiKey.trim(),
+        providerKind,
+        headers: buildHeadersObject(),
+      })
+      if (res.ok && res.models && res.models.length > 0) {
+        setFetchedModels(res.models)
+        setFetchModelsMsg(`找到 ${res.models.length} 个，点下方输入框选择`)
+      } else if (res.ok) {
+        setFetchedModels([])
+        setFetchModelsMsg('这个地址没返回模型列表，手填 id 即可')
+      } else {
+        setFetchedModels([])
+        setFetchModelsMsg('拉取不到，手填 id 即可')
+      }
+    } finally {
+      setFetchingModels(false)
+    }
+  }, [bridge, baseUrl, userApiKey, providerKind, buildHeadersObject])
+
   const handleTestConnection = React.useCallback(async () => {
     if (!bridge?.onboarding?.testConnection) return
     setTestState('testing')
     setTestMessage('')
-    const firstModelId = models.find(m => m.id.trim())?.id.trim()
+    const firstModelId = models.map(m => m.trim()).find(Boolean)
     const res = await bridge.onboarding.testConnection({
       baseUrl: baseUrl.trim(),
       apiKey: userApiKey.trim(),
@@ -172,7 +211,7 @@ export function OnboardingWizard({ opened, onClose, onCommitted }: {
       return
     }
     const cleanModels = models
-      .map(m => ({ id: m.id.trim(), displayName: m.displayName.trim() || undefined }))
+      .map(m => ({ id: m.trim() }))
       .filter(m => m.id.length > 0)
     if (cleanModels.length === 0) return
     setSaving(true)
@@ -294,7 +333,7 @@ export function OnboardingWizard({ opened, onClose, onCommitted }: {
     ? (baseUrlTrimmed === '' || /^https?:\/\//i.test(baseUrlTrimmed))
     : /^https?:\/\//i.test(baseUrlTrimmed)
   const canTest = baseUrlValid && (providerKind === 'anthropic' || baseUrlTrimmed.length > 0)
-  const hasModelId = models.some(m => m.id.trim().length > 0)
+  const hasModelId = models.some(m => m.trim().length > 0)
   const canSaveManual = baseUrlValid && userApiKey.trim().length > 0 && hasModelId && !saving
 
   return (
@@ -314,37 +353,41 @@ export function OnboardingWizard({ opened, onClose, onCommitted }: {
 
         {phase === 'input' && inputMode === 'manual' && (
           <Stack gap="md">
-            <Field label="供应商名称" hint="给这个接入点起个名字，方便你认（可选）">
-              <DesignTextInput
-                value={vendorName}
-                onChange={e => setVendorName(e.currentTarget.value)}
-                placeholder="如：本地 Ollama、我的中转站"
-                autoFocus
-              />
+            <Field label="供应商" hint="选一个自动填地址；中转站选「自定义」粘贴地址">
+              <Chip.Group value={presetId} onChange={value => handlePickPreset(value as string)}>
+                <Group gap={6}>
+                  {PROVIDER_PRESETS.map(p => (
+                    <Chip key={p.id} value={p.id} size="xs" radius="sm">{p.label}</Chip>
+                  ))}
+                </Group>
+              </Chip.Group>
             </Field>
-            <Field label="接口类型" hint={providerKind === 'anthropic' ? 'Claude 原生 /v1/messages 接口' : '绝大多数模型（OpenAI / Kimi / 智谱 / 中转站 / Ollama）都选这个'}>
-              <SegmentedControl
-                fullWidth
-                value={providerKind}
-                onChange={value => { setProviderKind(value as 'openai-compatible' | 'anthropic'); setTestState('idle') }}
-                data={[
-                  { label: 'OpenAI 兼容', value: 'openai-compatible' },
-                  { label: 'Anthropic 原生', value: 'anthropic' },
-                ]}
-              />
-            </Field>
+            {(presetId === '' || presetId === 'custom') && (
+              <Field label="接口类型" hint={providerKind === 'anthropic' ? 'Claude 原生接口' : '绝大多数模型都选这个'}>
+                <SegmentedControl
+                  fullWidth
+                  value={providerKind}
+                  onChange={value => { setProviderKind(value as 'openai-compatible' | 'anthropic'); setTestState('idle') }}
+                  data={[
+                    { label: 'OpenAI 兼容', value: 'openai-compatible' },
+                    { label: 'Anthropic 原生', value: 'anthropic' },
+                  ]}
+                />
+              </Field>
+            )}
             <Field
               label="接入地址（BaseURL）"
-              hint={providerKind === 'anthropic' ? '留空用官方 https://api.anthropic.com；中转站填它的地址' : 'OpenAI 兼容端点，到 /v1 为止'}
+              hint={providerKind === 'anthropic' ? '留空用官方地址；中转站填它给你的地址' : '到 /v1 为止'}
             >
               <DesignTextInput
                 value={baseUrl}
                 onChange={e => { setBaseUrl(e.currentTarget.value); setTestState('idle') }}
-                placeholder={providerKind === 'anthropic' ? 'https://api.anthropic.com（可留空）' : 'http://localhost:11434/v1'}
+                placeholder={providerKind === 'anthropic' ? 'https://api.anthropic.com（可留空）' : 'https://api.openai.com/v1'}
                 error={baseUrlTrimmed.length > 0 && !baseUrlValid ? '需以 http:// 或 https:// 开头' : undefined}
+                autoFocus
               />
             </Field>
-            <Field label="你的 API Key" hint="只存在你的电脑上，加密保存（本地模型可随便填）">
+            <Field label="你的 API Key" hint="只存在你的电脑上，加密保存">
               <PasswordInput
                 value={userApiKey}
                 onChange={e => { setUserApiKey(e.currentTarget.value); setTestState('idle') }}
@@ -353,39 +396,26 @@ export function OnboardingWizard({ opened, onClose, onCommitted }: {
             </Field>
 
             <Stack gap={4}>
-              <Text size="sm" c="var(--nomi-ink)">模型</Text>
-              <Stack gap={6}>
-                {models.map((m, i) => (
-                  <Group key={i} gap={6} wrap="nowrap" align="flex-start">
-                    <DesignTextInput
-                      value={m.id}
-                      onChange={e => updateModel(i, { id: e.currentTarget.value })}
-                      placeholder="模型 id，如 llama3.1 / gpt-4o"
-                      style={{ flex: 1.4 }}
-                    />
-                    <DesignTextInput
-                      value={m.displayName}
-                      onChange={e => updateModel(i, { displayName: e.currentTarget.value })}
-                      placeholder="显示名（可选）"
-                      style={{ flex: 1 }}
-                    />
-                    <ActionIcon
-                      variant="subtle"
-                      color="gray"
-                      onClick={() => removeModelRow(i)}
-                      disabled={models.length <= 1}
-                      aria-label="删除这一行模型"
-                    >
-                      <IconTrash size={14} />
-                    </ActionIcon>
-                  </Group>
-                ))}
-              </Stack>
-              <Group justify="flex-start">
-                <DesignButton variant="subtle" leftSection={<IconPlus size={14} />} onClick={addModelRow}>
-                  添加模型
+              <Group justify="space-between" align="center">
+                <Text size="sm" c="var(--nomi-ink)">模型</Text>
+                <DesignButton
+                  variant="subtle"
+                  onClick={handleFetchModels}
+                  disabled={!canTest || fetchingModels}
+                  loading={fetchingModels}
+                >
+                  拉取可用模型
                 </DesignButton>
               </Group>
+              <TagsInput
+                value={models}
+                onChange={value => { setModels(value); setTestState('idle') }}
+                data={fetchedModels}
+                placeholder={models.length === 0 ? '输入模型 id 回车，或先拉取可用模型' : undefined}
+                splitChars={[',', ' ', '\n']}
+                clearable
+              />
+              {fetchModelsMsg && <Text size="xs" c="var(--nomi-ink-60)">{fetchModelsMsg}</Text>}
             </Stack>
 
             <Stack gap={4}>
@@ -424,6 +454,14 @@ export function OnboardingWizard({ opened, onClose, onCommitted }: {
                 </DesignButton>
               </Group>
             </Stack>
+
+            <Field label="供应商名称（可选）">
+              <DesignTextInput
+                value={vendorName}
+                onChange={e => setVendorName(e.currentTarget.value)}
+                placeholder="留空则按地址自动命名"
+              />
+            </Field>
 
             <Group justify="space-between" align="center">
               <Group gap={8} align="center">
