@@ -21,6 +21,7 @@ export default function TimelineTrack({ track }: TimelineTrackProps): JSX.Elemen
   const timeline = useWorkbenchStore((state) => state.timeline)
   const addTimelineClipAtFrame = useWorkbenchStore((state) => state.addTimelineClipAtFrame)
   const setTimelinePlayhead = useWorkbenchStore((state) => state.setTimelinePlayhead)
+  const setTimelineSelection = useWorkbenchStore((state) => state.setTimelineSelection)
   const clipsRef = React.useRef<HTMLDivElement | null>(null)
   const [dragPreview, setDragPreview] = React.useState<TimelineDropPreview | null>(null)
   // v0.7.4: dragenter/over 期间无法 getData → 用单独的 hover state 提供视觉反馈
@@ -115,7 +116,9 @@ export default function TimelineTrack({ track }: TimelineTrackProps): JSX.Elemen
         data-drag-over={dragPreview ? 'true' : 'false'}
         data-drop-valid={dragPreview ? String(dragPreview.canPlace) : undefined}
         onClick={(event) => {
+          // 点轨道空白：移动 playhead 并清空多选（点 clip 会 stopPropagation，不触发此处）
           setTimelinePlayhead(resolveFrame(event.clientX))
+          if (!event.shiftKey) setTimelineSelection([])
         }}
         onDragEnter={(event) => {
           if (!event.dataTransfer.types.includes(TIMELINE_GENERATION_NODE_DRAG_MIME)) return

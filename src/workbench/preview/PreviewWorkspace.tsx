@@ -17,7 +17,6 @@ export default function PreviewWorkspace(): JSX.Element {
   const timeline = useWorkbenchStore((state) => state.timeline)
   const tracks = useWorkbenchStore((state) => state.timeline.tracks)
   const playheadFrame = useWorkbenchStore((state) => state.timeline.playheadFrame)
-  const fps = useWorkbenchStore((state) => state.timeline.fps)
   const playing = useWorkbenchStore((state) => state.timelinePlaying)
   const previewAspectRatio = useWorkbenchStore((state) => state.previewAspectRatio)
   const setTimelinePlaying = useWorkbenchStore((state) => state.setTimelinePlaying)
@@ -27,24 +26,40 @@ export default function PreviewWorkspace(): JSX.Element {
     [tracks, playheadFrame],
   )
 
+  // 播放推进：用 requestAnimationFrame 按真实墙钟时间推进 playhead，
+  // 取代旧的 setInterval(1000/fps) 固定步长 —— 后者会因定时器节流/步长误差与
+  // 实际经过时间漂移。这里用 fractional-frame 累加器，从「当前 playhead」实时续推
+  // （支持播放中 scrub），不再固定 +1。
   React.useEffect(() => {
     if (!playing) return
     if (durationFrame <= 0) {
       setTimelinePlaying(false)
       return
     }
-    const interval = window.setInterval(() => {
-      const current = useWorkbenchStore.getState().timeline
-      const nextFrame = current.playheadFrame + 1
-      if (nextFrame >= durationFrame) {
-        useWorkbenchStore.getState().setTimelinePlayhead(durationFrame)
-        useWorkbenchStore.getState().setTimelinePlaying(false)
-        return
+    const fpsNow = Math.max(1, useWorkbenchStore.getState().timeline.fps)
+    let lastNow = performance.now()
+    let fractionalFrames = 0
+    let rafId = 0
+    const tick = (now: number) => {
+      fractionalFrames += ((now - lastNow) / 1000) * fpsNow
+      lastNow = now
+      const wholeFrames = Math.floor(fractionalFrames)
+      if (wholeFrames > 0) {
+        fractionalFrames -= wholeFrames
+        const current = useWorkbenchStore.getState().timeline.playheadFrame
+        const nextFrame = current + wholeFrames
+        if (nextFrame >= durationFrame) {
+          useWorkbenchStore.getState().setTimelinePlayhead(durationFrame)
+          useWorkbenchStore.getState().setTimelinePlaying(false)
+          return
+        }
+        useWorkbenchStore.getState().setTimelinePlayhead(nextFrame)
       }
-      useWorkbenchStore.getState().setTimelinePlayhead(nextFrame)
-    }, 1000 / timeline.fps)
-    return () => window.clearInterval(interval)
-  }, [durationFrame, playing, setTimelinePlaying, fps])
+      rafId = window.requestAnimationFrame(tick)
+    }
+    rafId = window.requestAnimationFrame(tick)
+    return () => window.cancelAnimationFrame(rafId)
+  }, [durationFrame, playing, setTimelinePlaying])
 
   return (
     <section className={cn(

@@ -99,6 +99,65 @@ export function moveClipToFrame(timeline: TimelineState, clipId: string, startFr
   return moved ? { ...timeline, tracks } : timeline
 }
 
+/**
+ * 给定期望起点，返回轨道上离它最近的"合法起点"（不与其它 clip 重叠）。
+ * 找不到 clip 返回 null；否则总能返回一个合法值（最差落到末尾空隙）——
+ * 即"撞了滑入最近空位"，绝不弹回原位。用于拖动中的实时落位。
+ */
+export function resolveLegalStartFrame(track: TimelineTrack, clipId: string, desiredStart: number): number | null {
+  const current = track.clips.find((clip) => clip.id === clipId)
+  if (!current) return null
+  const length = getVisibleFrameCount(current)
+  const desired = clampInteger(desiredStart, 0)
+  const others = track.clips
+    .filter((clip) => clip.id !== clipId)
+    .sort((left, right) => left.startFrame - right.startFrame)
+
+  // 收集"起点合法区间" [lo, hi]：每个能放下 length 的空隙
+  const ranges: Array<[number, number]> = []
+  let cursor = 0
+  for (const other of others) {
+    if (other.startFrame - cursor >= length) ranges.push([cursor, other.startFrame - length])
+    cursor = Math.max(cursor, other.endFrame)
+  }
+  ranges.push([cursor, Number.MAX_SAFE_INTEGER]) // 末尾开放空隙，保证总有合法位
+
+  let best = desired
+  let bestDistance = Number.POSITIVE_INFINITY
+  for (const [lo, hi] of ranges) {
+    const clamped = Math.min(hi, Math.max(lo, desired))
+    const distance = Math.abs(clamped - desired)
+    if (distance < bestDistance) {
+      bestDistance = distance
+      best = clamped
+    }
+  }
+  return best
+}
+
+/**
+ * 把 clip 移到"离期望起点最近的合法位"。与 moveClipToFrame 不同：
+ * 重叠时不放弃（不弹回），而是滑入最近空位。用于拖动实时落位。
+ */
+export function moveClipToLegalFrame(timeline: TimelineState, clipId: string, startFrame: number): TimelineState {
+  const id = String(clipId || '').trim()
+  if (!id) return timeline
+  let moved = false
+  const tracks = timeline.tracks.map((track) => {
+    if (!track.clips.some((clip) => clip.id === id)) return track
+    const legalStart = resolveLegalStartFrame(track, id, startFrame)
+    if (legalStart == null) return track
+    moved = true
+    return {
+      ...track,
+      clips: track.clips
+        .map((clip) => (clip.id === id ? withClipStartFrame(clip, legalStart) : clip))
+        .sort((left, right) => left.startFrame - right.startFrame),
+    }
+  })
+  return moved ? { ...timeline, tracks } : timeline
+}
+
 export function removeClipById(timeline: TimelineState, clipId: string): TimelineState {
   const id = String(clipId || '').trim()
   if (!id) return timeline
@@ -109,6 +168,64 @@ export function removeClipById(timeline: TimelineState, clipId: string): Timelin
       clips: track.clips.filter((clip) => clip.id !== id),
     })),
   }
+}
+
+export function removeClipsByIds(timeline: TimelineState, clipIds: readonly string[]): TimelineState {
+  const idSet = new Set(clipIds.map((id) => String(id || '').trim()).filter(Boolean))
+  if (idSet.size === 0) return timeline
+  let removed = false
+  const tracks = timeline.tracks.map((track) => {
+    const nextClips = track.clips.filter((clip) => !idSet.has(clip.id))
+    if (nextClips.length === track.clips.length) return track
+    removed = true
+    return { ...track, clips: nextClips }
+  })
+  return removed ? { ...timeline, tracks } : timeline
+}
+
+// ── 成组移动（多选拖动）─────────────────────────────────────────
+export type ClipOrigin = { id: string; startFrame: number; endFrame: number }
+
+/**
+ * 限制成组位移 delta：使任一选中 clip 不与非选中 clip 重叠、且不越过 0。
+ * 选中 clip 之间因整体同速平移，相对关系不变、不会互相重叠，故只需对非选中做边界。
+ */
+export function clampGroupDelta(timeline: TimelineState, origins: readonly ClipOrigin[], deltaFrame: number): number {
+  const ids = new Set(origins.map((origin) => origin.id))
+  let minDelta = -Number.MAX_SAFE_INTEGER
+  let maxDelta = Number.MAX_SAFE_INTEGER
+  for (const track of timeline.tracks) {
+    const others = track.clips.filter((clip) => !ids.has(clip.id))
+    for (const origin of origins) {
+      if (!track.clips.some((clip) => clip.id === origin.id)) continue
+      let leftBound = 0
+      let rightBound = Number.MAX_SAFE_INTEGER
+      for (const other of others) {
+        if (other.endFrame <= origin.startFrame) leftBound = Math.max(leftBound, other.endFrame)
+        else if (other.startFrame >= origin.endFrame) rightBound = Math.min(rightBound, other.startFrame)
+      }
+      minDelta = Math.max(minDelta, leftBound - origin.startFrame, -origin.startFrame)
+      maxDelta = Math.min(maxDelta, rightBound - origin.endFrame)
+    }
+  }
+  if (minDelta > maxDelta) return 0
+  return Math.max(minDelta, Math.min(maxDelta, deltaFrame))
+}
+
+/** 把一组 clip 设到绝对起点（外部已保证组内同速平移、不重叠）。 */
+export function applyClipStartFrames(timeline: TimelineState, positions: Record<string, number>): TimelineState {
+  const idSet = new Set(Object.keys(positions))
+  if (idSet.size === 0) return timeline
+  const tracks = timeline.tracks.map((track) => {
+    if (!track.clips.some((clip) => idSet.has(clip.id))) return track
+    return {
+      ...track,
+      clips: track.clips
+        .map((clip) => (idSet.has(clip.id) ? withClipStartFrame(clip, positions[clip.id]) : clip))
+        .sort((left, right) => left.startFrame - right.startFrame),
+    }
+  })
+  return { ...timeline, tracks }
 }
 
 export function splitClipAtFrame(timeline: TimelineState, clipId: string, frame: number): TimelineState {
