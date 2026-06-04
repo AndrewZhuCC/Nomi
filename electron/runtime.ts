@@ -56,6 +56,7 @@ import {
   taskStatusFromResponse,
   valuesFromMapping,
 } from "./tasks/responseParsing";
+import { TtlLruCache } from "./tasks/taskCache";
 import {
   assetBucketFromMeta,
   assetKindFromContentType,
@@ -296,7 +297,8 @@ type TaskResult = {
   };
 };
 
-const taskCache = new Map<string, CachedTask>();
+// TTL(1h) + LRU(200) 上限，防异步任务条目无界驻留（P0-7）。不再缓存明文 apiKey。
+const taskCache = new TtlLruCache<CachedTask>({ maxEntries: 200, ttlMs: 60 * 60 * 1000 });
 const exportJobManager = new ExportJobManager();
 
 type CachedTask = {
@@ -305,7 +307,6 @@ type CachedTask = {
   raw: unknown;
   mapping?: Mapping | null;
   model?: Model;
-  apiKey?: string;
   providerMeta?: JsonRecord;
   projectId?: string;
   nodeId?: string;
@@ -2176,7 +2177,6 @@ export async function runTask(payload: unknown): Promise<TaskResult> {
         raw: executed.response,
         mapping,
         model,
-        apiKey,
         providerMeta: normalized.providerMeta,
         projectId,
         nodeId,
@@ -2218,7 +2218,7 @@ export async function runTask(payload: unknown): Promise<TaskResult> {
   const assetUrl = extractAssetUrl(providerResponse);
   const upstreamTaskId = extractTaskIdShared(providerResponse) || taskId;
   if (!assetUrl) {
-    taskCache.set(upstreamTaskId, { vendor: vendorKey, request, raw: providerResponse, model, apiKey, projectId, nodeId, wantedKind });
+    taskCache.set(upstreamTaskId, { vendor: vendorKey, request, raw: providerResponse, model, projectId, nodeId, wantedKind });
     return { id: upstreamTaskId, kind, status: "queued", assets: [], raw: providerResponse };
   }
   const type: "image" | "video" = wantedKind === "video" ? "video" : "image";
@@ -2263,7 +2263,8 @@ export async function fetchTaskResult(payload: unknown): Promise<{ vendor: strin
     };
   }
   const queryOperation = cached.mapping?.query;
-  if (cached.mapping && queryOperation && cached.model && cached.apiKey) {
+  if (cached.mapping && queryOperation && cached.model) {
+    // 不再用缓存的明文 key，轮询时按 vendor 重新派生（并重新校验 key 仍可用）。
     const { vendor, model, apiKey } = findExecutableModel(
       cached.vendor,
       cached.model.modelKey,
@@ -2272,7 +2273,7 @@ export async function fetchTaskResult(payload: unknown): Promise<{ vendor: strin
     const executed = await executeProfileOperation({
       vendor,
       model,
-      apiKey: cached.apiKey || apiKey,
+      apiKey,
       request: cached.request,
       operation: queryOperation,
       providerMeta: {
