@@ -111,11 +111,9 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
   const totalFrames = computeTimelineDuration(timeline)
   const currentSeconds = (playheadFrame / (timeline.fps || 30)).toFixed(1)
   const totalSeconds = (totalFrames / (timeline.fps || 30)).toFixed(1)
-  const hasVideoClips = timeline.tracks.some(t => t.clips.some(c => c.type === 'video'))
   const exportBusy = exportStatus === 'preparing' || exportStatus === 'recording' || exportStatus === 'converting'
   const exportTitle = buildMp4ExportButtonTitle({
     aspectRatio,
-    hasVideoClips,
     isEmpty,
     isRecording: exportStatus === 'recording',
     isConverting: exportStatus === 'converting',
@@ -204,9 +202,6 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
 
   const handleExport = React.useCallback(async () => {
     if (exportBusy) return
-    if (hasVideoClips) {
-      toast('注意：基础 MP4 导出暂不包含音频轨道', 'info')
-    }
     try {
       setExportStatus('preparing')
       setExportRatio(0)
@@ -230,7 +225,7 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
       const message = error instanceof Error ? error.message : '导出失败'
       toast(message, 'error')
     }
-  }, [aspectRatio, exportBusy, hasVideoClips, timeline])
+  }, [aspectRatio, exportBusy, timeline])
 
   const togglePlayback = React.useCallback(() => {
     const durationFrame = timeline.tracks.reduce((maxFrame, track) => {
