@@ -15,12 +15,15 @@ import {
   SEEDANCE_2_MODEL_SEED,
   SEEDANCE_2_QUERY_OP,
 } from "./kieSeedance";
+import { HAPPYHORSE_CREATE_OP, HAPPYHORSE_MAPPING, HAPPYHORSE_MODEL_SEED, HAPPYHORSE_QUERY_OP } from "./kieHappyhorse";
 
 /** 稳定 id：按 (vendor, taskKind, model) 固定，便于幂等与排查。 */
 const SEEDANCE_MAPPING_ID = "seed-kie-seedance2-image_to_video";
+const HAPPYHORSE_MAPPING_ID = "seed-kie-happyhorse-text_to_video";
 
-/** Seedance 模型的 meta：指向内置档案（渲染层据此套 UI 模板，见档案层）。 */
+/** 模型 meta：指向内置档案（渲染层据此套 UI 模板，见档案层）。 */
 const SEEDANCE_MODEL_META = { archetypeId: "seedance-2" };
+const HAPPYHORSE_MODEL_META = { archetypeId: "happyhorse" };
 
 export function applyBuiltinSeeds(
   state: CatalogState,
@@ -84,6 +87,36 @@ export function applyBuiltinSeeds(
       updatedAt: now,
     };
     mappings.push(mapping);
+    changed = true;
+  }
+
+  // HappyHorse 1.0（C4）：同 kie vendor，4 模式合 1 条目 + 1 条 (kie, text_to_video) mapping。
+  if (!models.some((m) => m.modelKey === HAPPYHORSE_MODEL_SEED.modelKey && m.vendorKey === KIE_VENDOR_SEED.key)) {
+    models.push({
+      modelKey: HAPPYHORSE_MODEL_SEED.modelKey,
+      vendorKey: KIE_VENDOR_SEED.key,
+      labelZh: HAPPYHORSE_MODEL_SEED.labelZh,
+      kind: HAPPYHORSE_MODEL_SEED.kind,
+      enabled: true,
+      meta: HAPPYHORSE_MODEL_META,
+      createdAt: now,
+      updatedAt: now,
+    });
+    changed = true;
+  }
+
+  if (!mappings.some((mp) => mp.vendorKey === KIE_VENDOR_SEED.key && mp.taskKind === HAPPYHORSE_MAPPING.taskKind)) {
+    mappings.push({
+      id: HAPPYHORSE_MAPPING_ID,
+      vendorKey: KIE_VENDOR_SEED.key,
+      taskKind: HAPPYHORSE_MAPPING.taskKind,
+      name: HAPPYHORSE_MAPPING.name,
+      enabled: true,
+      create: HAPPYHORSE_CREATE_OP,
+      query: HAPPYHORSE_QUERY_OP,
+      createdAt: now,
+      updatedAt: now,
+    });
     changed = true;
   }
 

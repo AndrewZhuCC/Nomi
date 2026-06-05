@@ -102,6 +102,26 @@ try {
   assert(afterUpload.badge1, "上传后角色图 chip 带 ① 数字徽标（character1）");
   assert(afterUpload.hasCue, "prompt 旁出现 character1.. 提示（U2）");
 
+  // ── C4：切到 HappyHorse → 4 模式合 1（统一意图词 + vendor 副标签）+ i2v 无比例（U3）──
+  await modelSelect.selectOption({ label: "HappyHorse 1.0" }).catch(async () => { await modelSelect.selectOption("happyhorse") });
+  await win.waitForTimeout(1200);
+  await shot("06-happyhorse");
+  const happyText = await win.evaluate(() => (document.querySelector(".generation-canvas-v2-node__composer")?.innerText || "").replace(/\s+/g, " "));
+  console.log("    happyhorse composer:", happyText.slice(0, 220));
+  assert(/文生视频/.test(happyText) && /单图首帧/.test(happyText) && /角色参考/.test(happyText) && /视频编辑/.test(happyText),
+    "HappyHorse：4 模式统一意图词都在（文生视频/单图首帧/角色参考/视频编辑）");
+  assert(/text-to-video/.test(happyText), "HappyHorse：vendor 副标签（text-to-video）在");
+
+  // 切到「单图首帧」(i2v) → 标量参数不含「比例」（U3：i2v 无 aspect_ratio 直接不渲染）
+  await win.locator('.generation-canvas-v2-node__composer [role="group"][aria-label="生成方式"] button', { hasText: "单图首帧" }).first().click();
+  await win.waitForTimeout(800);
+  await shot("07-happyhorse-i2v");
+  const i2vHasRatio = await win.evaluate(() => {
+    const comp = document.querySelector(".generation-canvas-v2-node__composer");
+    return comp ? Array.from(comp.querySelectorAll('select[aria-label="比例"]')).length > 0 : false;
+  });
+  assert(!i2vHasRatio, "HappyHorse i2v：标量参数无「比例」控件（U3）");
+
   console.log(`\nMODEBAR E2E PASS: ${passed} assertions`);
 } catch (error) {
   await shot("99-fail");

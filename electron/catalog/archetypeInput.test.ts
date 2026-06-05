@@ -38,4 +38,12 @@ describe("referenceInputParams", () => {
     expect(out.first_frame_url).toBe("F");
     expect(out.last_frame_url).toBe("L");
   });
+
+  it('档案模型：extras.archetypeInput 原样采用（renderer 已构建，单源）', () => {
+    const out = referenceInputParams({
+      firstFrameUrl: "ignored",
+      archetypeInput: { model: "happyhorse/reference-to-video", reference_image_urls: ["c1", "c2"] },
+    });
+    expect(out).toEqual({ model: "happyhorse/reference-to-video", reference_image_urls: ["c1", "c2"] });
+  });
 });

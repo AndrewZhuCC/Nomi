@@ -24,7 +24,7 @@ import {
 } from '../model/generationNodeKinds'
 import type { ResolvedGenerationReferences } from './generationReferenceResolver'
 import { resolveArchetypeForModel } from '../../../config/modelArchetypes'
-import { archetypeManagedReferenceKeys, projectArchetypeReferenceExtras } from '../nodes/controls/archetypeMeta'
+import { archetypeModeModelEnum, buildArchetypeInputParams } from '../nodes/controls/archetypeMeta'
 
 export type CatalogTaskActionOptions = {
   references?: Partial<ResolvedGenerationReferences>
@@ -147,6 +147,11 @@ async function resolveExecutableNodeFromCatalog(
 function resolveTaskKind(node: GenerationCanvasNode, references: Partial<ResolvedGenerationReferences>): TaskKind {
   const executionKind = getGenerationNodeExecutionKind(node.kind)
   if (executionKind === 'video') {
+    // 档案 + per-mode enum（HappyHorse）：4 模式都打同一 kie createTask（kie 按 model enum 分流），
+    // 统一走 text_to_video 这条 mapping —— 避开按参考启发式分到 image_to_video 而和 Seedance 撞车。
+    const meta = node.meta || {}
+    const archetype = resolveArchetypeForModel({ modelKey: asTrimmedString(meta.modelKey), modelAlias: asTrimmedString(meta.modelAlias), meta })
+    if (archetype && archetypeModeModelEnum(archetype, meta)) return 'text_to_video'
     const hasFrame = Boolean(
       asTrimmedString(references.firstFrameUrl) ||
       asTrimmedString(references.lastFrameUrl) ||
@@ -273,35 +278,34 @@ function buildReferenceExtras(
     ...readStringArray(meta.compositionReferenceImages),
     ...(references.compositionReferenceImages || []),
   ])
-  // 认得档案的模型 → 帧键由「当前模式」投影（M2 互斥：首帧模式不带 lastFrameUrl，即便 meta 里
-  // 还残留 —— 否则上游收到混了 last 的 body 而 422，见 §2 坑2）。认不出 → 现有无条件带首/尾帧。
+  // 认得档案的模型 → renderer 据**当前模式**把参考值打成完整 snake input（含 per-mode enum），放进
+  // extras.archetypeInput，runtime 原样铺进 params（M1/M2/M3）。别的模式的残留键根本不进结果（互斥）。
+  // 认不出 → 现有无条件带首/尾帧（非档案模型走老路）。
   const archetype = resolveArchetypeForModel({
     modelKey: asTrimmedString(meta.modelKey),
     modelAlias: asTrimmedString(meta.modelAlias),
     meta,
   })
-  // archetype 分支：先把所有受管参考键（帧 + 数组槽）置 undefined（挡住 buildCatalogTaskRequest 里
-  // `...meta` 把别的模式残留的全局值泄露进 body），再覆盖回当前模式投影出的活跃键。
-  const frameExtras = archetype
-    ? {
-        ...Object.fromEntries(archetypeManagedReferenceKeys(archetype).map((key) => [key, undefined])),
-        ...projectArchetypeReferenceExtras(meta, archetype, {
-          firstFrameUrl: asTrimmedString(references.firstFrameUrl) || null,
-          lastFrameUrl: asTrimmedString(references.lastFrameUrl) || null,
-        }),
-      }
-    : {
-        ...(asTrimmedString(references.firstFrameUrl) || asTrimmedString(meta.firstFrameUrl)
-          ? { firstFrameUrl: asTrimmedString(references.firstFrameUrl) || asTrimmedString(meta.firstFrameUrl) }
-          : {}),
-        ...(asTrimmedString(references.lastFrameUrl) || asTrimmedString(meta.lastFrameUrl)
-          ? { lastFrameUrl: asTrimmedString(references.lastFrameUrl) || asTrimmedString(meta.lastFrameUrl) }
-          : {}),
-      }
+  if (archetype) {
+    const archetypeInput = buildArchetypeInputParams(meta, archetype, {
+      firstFrameUrl: asTrimmedString(references.firstFrameUrl) || null,
+      lastFrameUrl: asTrimmedString(references.lastFrameUrl) || null,
+    })
+    return {
+      ...(referenceImages.length ? { referenceImages } : {}),
+      archetypeInput,
+      ...(styleReferenceImages.length ? { styleReferenceImages } : {}),
+      ...(characterReferenceImages.length ? { characterReferenceImages } : {}),
+      ...(compositionReferenceImages.length ? { compositionReferenceImages } : {}),
+    }
+  }
 
+  const firstFrameUrl = asTrimmedString(references.firstFrameUrl) || asTrimmedString(meta.firstFrameUrl)
+  const lastFrameUrl = asTrimmedString(references.lastFrameUrl) || asTrimmedString(meta.lastFrameUrl)
   return {
     ...(referenceImages.length ? { referenceImages } : {}),
-    ...frameExtras,
+    ...(firstFrameUrl ? { firstFrameUrl } : {}),
+    ...(lastFrameUrl ? { lastFrameUrl } : {}),
     ...(styleReferenceImages.length ? { styleReferenceImages } : {}),
     ...(characterReferenceImages.length ? { characterReferenceImages } : {}),
     ...(compositionReferenceImages.length ? { compositionReferenceImages } : {}),

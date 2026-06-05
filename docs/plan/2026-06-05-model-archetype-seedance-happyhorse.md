@@ -243,10 +243,22 @@ Kling 试装用 `GET /api/v1/jobs/recordInfo`（**已端到端验证**），mark
 ### 综合结论
 方案**方向成立、抽象正确**（6/6 未推翻档案层），但 **GO-WITH-CHANGES**：先做 M1/M2/M3 的单一真相源 + 投影 + enum 路径（否则互斥在线上不成立），按 S1 切薄第一片并用真实生成验 M4，UI 按 U1/U2 重做标签后再进实现。已据此重排 §6 chunk（见下）。
 
-### 重排后的 chunk（取代 §6 原节奏）
-- **C0（前置）**：P0-1 typecheck 门 + 修 6 个 src 类型错；抽 `electron/catalog/types.ts` 统一 `BillingModelKind`（P0-3）。
-- **C1（薄垂直片）**：Seedance 首帧档案 1 条 + schema 分支 + runtime 建 `input.first_frame_url` + `model` enum 路径 + kie mapping（recordInfo）→ **一次真实生成验通**（含 M4 端点核对、尾随空格断言）。
-- **C2**：第二模式（首尾帧）+ 命名空间 meta + 投影 + 模式 segmented（验 M2 互斥 hide）。
-- **C3**：多参考数组槽（character1..9，meta-only，验 M6）+ U1/U2/U3 体验。
-- **C4**：HappyHorse 4 模式合 1（验 M3 enum-per-mode）+ seed migration v3→4。
-- 各 chunk：build 绿 + vitest 不回归 + `check:filesize` 净减 + Rule 13 走查；真实外呼花额度的生成先问用户。
+### 重排后的 chunk（取代 §6 原节奏）—— 执行回填
+- **C0（前置）✅**：P0-1 typecheck 门 + 抽 `electron/catalog/types.ts` 统一 `BillingModelKind`（P0-3）。
+- **C1（薄垂直片）✅**：Seedance 首帧档案 + schema 分支 + runtime + kie mapping（recordInfo）+ 内置 seed + 完整 Playwright e2e（含 M4 端点核对、尾随空格断言）。
+- **C2a ✅**：首尾帧传输 + M2 互斥投影（空帧不进 body）。
+- **C2b ✅**：模式分段切换（统一意图词 + vendor 副标签）+ 命名空间 meta + 首尾帧 UI（验 M2 互斥 hide）。`NodeParameterControls` 1097→605 出巨壳白名单。
+- **C3 ✅**：全能参考多参考数组槽（character1..9 meta-only，验 M6）+ U2/U3；`electron/catalog/archetypeInput.ts` input-builder（M5）。
+- **C4 ✅**：HappyHorse 4 模式合 1（验 M3 per-mode enum 覆盖）+ 内置 seed（幂等 exists-or-skip，非版本迁移）。
+- 各 chunk：CI 五门绿（filesize/lint:ci/typecheck/vitest/build）+ Rule 13 零额度走查（`tests/ux/archetype-modebar.e2e.mjs`，14 断言）。
+
+**架构演进（回填，比原 §3 更准）**：
+- 传输塑形最终落在 **renderer 的 `buildArchetypeInputParams`**（archetypeMeta）：据当前模式把参考值打成完整
+  snake `input` 参数（含 per-mode `model` enum），放进 `extras.archetypeInput`，runtime 的 `referenceInputParams`
+  原样采用（单一来源 M1，互斥 M2 在此发生，§2 坑2 不再可能）。slot 增 `inputKey`/`asArray`（模型契约键，
+  供应商无关）；mode 增 `modelEnum`（M3）。供应商的尾随空格 quirk（§2 坑1）只在各 kie mapping body 照抄一次。
+- HappyHorse 4 模式统一走 `(kie, text_to_video)` 一条 mapping（kie 按 model enum 自分流），避开和 Seedance
+  的 `(kie, image_to_video)` 撞车；`resolveTaskKind` 对「有 modelEnum 的档案模式」归一到 text_to_video。
+
+**待用户额度验证（真实外呼，未跑）**：Seedance `tests/ux/seedance.e2e.mjs` + HappyHorse `tests/ux/happyhorse.e2e.mjs`
+（均 `KIE_API_KEY` 门控）—— 真实生成验上游接受 per-mode enum + 尾随空格 input 键。离线传输测试已全覆盖契约形状。

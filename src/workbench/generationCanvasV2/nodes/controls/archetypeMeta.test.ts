@@ -1,16 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import { getArchetypeById } from '../../../../config/modelArchetypes'
+import { archetypeModeModelEnum } from './archetypeMeta'
 import {
   applyArchetypeModeSwitch,
-  archetypeManagedReferenceKeys,
   archetypeModeArraySlots,
   archetypeModeChoices,
   archetypeModeSlots,
+  buildArchetypeInputParams,
   currentArchetypeMode,
   ensureArchetypeNodeMeta,
   intentLabel,
   modeHasCharacterSlot,
-  projectArchetypeReferenceExtras,
 } from './archetypeMeta'
 
 // C2b：模式分段切换 + 命名空间 meta + flat 帧键投影（M2 互斥）的核心逻辑钉死。
@@ -99,22 +99,22 @@ describe('applyArchetypeModeSwitch — 只改 modeId，参考值全局保留', (
   })
 })
 
-describe('projectArchetypeReferenceExtras — M2 互斥发生在传输投影', () => {
-  it('首帧模式：即便 meta 里残留 lastFrameUrl，也只投影 firstFrameUrl（不进 body，避免 422）', () => {
+describe('buildArchetypeInputParams — M2 互斥发生在档案驱动的 input 构建（snake 键）', () => {
+  it('首帧模式：即便 meta 残留 lastFrameUrl，也只出 first_frame_url（不进 body，避免 422）', () => {
     const meta = { archetype: { id: 'seedance-2', modeId: 'first' }, firstFrameUrl: 'F.png', lastFrameUrl: 'L.png' }
-    expect(projectArchetypeReferenceExtras(meta, SEEDANCE)).toEqual({ firstFrameUrl: 'F.png' })
+    expect(buildArchetypeInputParams(meta, SEEDANCE)).toEqual({ first_frame_url: 'F.png' })
   })
-  it('首尾帧模式：first + last 两帧都投影', () => {
+  it('首尾帧模式：first + last 两帧都出', () => {
     const meta = { archetype: { id: 'seedance-2', modeId: 'firstlast' }, firstFrameUrl: 'F.png', lastFrameUrl: 'L.png' }
-    expect(projectArchetypeReferenceExtras(meta, SEEDANCE)).toEqual({ firstFrameUrl: 'F.png', lastFrameUrl: 'L.png' })
+    expect(buildArchetypeInputParams(meta, SEEDANCE)).toEqual({ first_frame_url: 'F.png', last_frame_url: 'L.png' })
   })
   it('references（画布连线）优先于 meta 全局值', () => {
     const meta = { archetype: { id: 'seedance-2', modeId: 'first' }, firstFrameUrl: 'stale.png' }
-    expect(projectArchetypeReferenceExtras(meta, SEEDANCE, { firstFrameUrl: 'edge.png' })).toEqual({ firstFrameUrl: 'edge.png' })
+    expect(buildArchetypeInputParams(meta, SEEDANCE, { firstFrameUrl: 'edge.png' })).toEqual({ first_frame_url: 'edge.png' })
   })
-  it('空值不投影', () => {
+  it('空值不出键；Seedance 各模式同 model → 不带 model（body 用 modelKey）', () => {
     const meta = { archetype: { id: 'seedance-2', modeId: 'firstlast' }, firstFrameUrl: '  ' }
-    expect(projectArchetypeReferenceExtras(meta, SEEDANCE)).toEqual({})
+    expect(buildArchetypeInputParams(meta, SEEDANCE)).toEqual({})
   })
 })
 
@@ -146,31 +146,72 @@ describe('C3 全能参考 — 数组槽声明', () => {
   })
 })
 
-describe('C3 全能参考 — 数组投影（M2 互斥含数组槽）', () => {
-  it('omni 模式：投影三个数组（按序保留 character1..9 顺序）', () => {
+describe('C3 全能参考 — 数组 input 构建（M2 互斥含数组槽，snake 键）', () => {
+  it('omni 模式：三个数组按 slot 的 inputKey 出（按序保留 character1..9 顺序）', () => {
     const meta = {
       archetype: { id: 'seedance-2', modeId: 'omni' },
       referenceImageUrls: ['c1.png', 'c2.png', 'c3.png'],
       referenceVideoUrls: ['v1.mp4'],
       referenceAudioUrls: [],
-      firstFrameUrl: 'stale.png', // 别的模式残留 → 不该投影
+      firstFrameUrl: 'stale.png', // 别的模式残留 → 不该出
     }
-    expect(projectArchetypeReferenceExtras(meta, SEEDANCE)).toEqual({
-      referenceImageUrls: ['c1.png', 'c2.png', 'c3.png'],
-      referenceVideoUrls: ['v1.mp4'],
+    expect(buildArchetypeInputParams(meta, SEEDANCE)).toEqual({
+      reference_image_urls: ['c1.png', 'c2.png', 'c3.png'],
+      reference_video_urls: ['v1.mp4'],
     })
   })
-  it('首帧模式：即便 meta 残留 omni 的角色图数组，也不投影（互斥）', () => {
+  it('首帧模式：即便 meta 残留 omni 的角色图数组，也不出（互斥）', () => {
     const meta = {
       archetype: { id: 'seedance-2', modeId: 'first' },
       firstFrameUrl: 'F.png',
       referenceImageUrls: ['c1.png', 'c2.png'],
     }
-    expect(projectArchetypeReferenceExtras(meta, SEEDANCE)).toEqual({ firstFrameUrl: 'F.png' })
+    expect(buildArchetypeInputParams(meta, SEEDANCE)).toEqual({ first_frame_url: 'F.png' })
   })
-  it('受管键涵盖帧键 + 三个数组 metaKey（请求构建据此 null 掉非活跃键）', () => {
-    expect(archetypeManagedReferenceKeys(SEEDANCE).sort()).toEqual(
-      ['firstFrameUrl', 'lastFrameUrl', 'referenceAudioUrls', 'referenceImageUrls', 'referenceVideoUrls'].sort(),
-    )
+})
+
+// ───────────────────────── C4：HappyHorse 4 模式合 1 ─────────────────────────
+const HAPPY = getArchetypeById('happyhorse')!
+
+describe('C4 HappyHorse — 档案 + per-mode enum + 模型契约 input 键', () => {
+  it('4 模式各有不同 modelEnum（M3）', () => {
+    expect(HAPPY.modes.map((m) => [m.id, m.modelEnum])).toEqual([
+      ['t2v', 'happyhorse/text-to-video'],
+      ['i2v', 'happyhorse/image-to-video'],
+      ['ref', 'happyhorse/reference-to-video'],
+      ['edit', 'happyhorse/video-edit'],
+    ])
+  })
+
+  it('archetypeModeModelEnum 取当前模式 enum（Seedance 无 enum → null）', () => {
+    expect(archetypeModeModelEnum(HAPPY, { archetype: { id: 'happyhorse', modeId: 'ref' } })).toBe('happyhorse/reference-to-video')
+    expect(archetypeModeModelEnum(SEEDANCE, { archetype: { id: 'seedance-2', modeId: 'first' } })).toBeNull()
+  })
+
+  it('i2v：单图首帧但 input 是 image_urls[正好 1]（asArray 包成数组）+ 带 model enum', () => {
+    const meta = { archetype: { id: 'happyhorse', modeId: 'i2v' }, firstFrameUrl: 'F.png' }
+    expect(buildArchetypeInputParams(meta, HAPPY)).toEqual({ image_urls: ['F.png'], model: 'happyhorse/image-to-video' })
+  })
+
+  it('ref：角色图走 reference_image（不是 Seedance 的 reference_image_urls）', () => {
+    const meta = { archetype: { id: 'happyhorse', modeId: 'ref' }, referenceImageUrls: ['c1', 'c2'] }
+    expect(buildArchetypeInputParams(meta, HAPPY)).toEqual({ reference_image: ['c1', 'c2'], model: 'happyhorse/reference-to-video' })
+  })
+
+  it('edit：source_video → video_url + 参考图 → reference_image', () => {
+    const meta = { archetype: { id: 'happyhorse', modeId: 'edit' }, sourceVideoUrl: 'src.mp4', referenceImageUrls: ['r1'] }
+    expect(buildArchetypeInputParams(meta, HAPPY)).toEqual({ video_url: 'src.mp4', reference_image: ['r1'], model: 'happyhorse/video-edit' })
+  })
+
+  it('t2v：无参考槽，只带 model enum', () => {
+    const meta = { archetype: { id: 'happyhorse', modeId: 't2v' } }
+    expect(buildArchetypeInputParams(meta, HAPPY)).toEqual({ model: 'happyhorse/text-to-video' })
+  })
+
+  it('i2v 模式标量参数无 aspect_ratio（U3：无比例时直接不渲染）', () => {
+    const i2v = HAPPY.modes.find((m) => m.id === 'i2v')!
+    expect(i2v.params.map((p) => p.key)).not.toContain('aspect_ratio')
+    const t2v = HAPPY.modes.find((m) => m.id === 't2v')!
+    expect(t2v.params.map((p) => p.key)).toContain('aspect_ratio')
   })
 })

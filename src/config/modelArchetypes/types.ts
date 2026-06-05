@@ -24,6 +24,16 @@ export type ArchetypeReferenceSlot = {
   label: string;
   min: number;
   max: number;
+  /**
+   * 该模型 API 的输入参数名（模型契约，供应商无关）。缺省时由 kind 推断（见 archetypeMeta
+   * SLOT_DEFAULTS）。例：Seedance 全能参考的角色图 = `reference_image_urls`；HappyHorse 角色参考
+   * 的角色图 = `reference_image`（不同模型不同名）。供应商的表示层 quirk（如 kie 文档里 key 带尾随
+   * 空格 §2 坑1）不在这——只在该供应商 mapping body 写一次（M1）。
+   */
+  inputKey?: string;
+  /** 该输入是否序列化为数组。缺省由 kind 推断（image/video/audio_ref=true，frame=false）。
+   *  特例：HappyHorse 单图首帧的 input 是 `image_urls`[正好 1]——单图槽但 asArray=true（包成 1 元素数组）。 */
+  asArray?: boolean;
 };
 
 /** 跨模型统一的「意图」——UI 主标签按它走（角色参考/单图首帧/首尾帧/文生/视频编辑）。 */
@@ -39,6 +49,12 @@ export type ArchetypeMode = {
   /** 标量参数：复用现有控件类型（规则 1，不另造）。 */
   params: ModelParameterControl[];
   promptRequired: boolean;
+  /**
+   * 该模式发请求时用的 model enum，覆盖 catalog 行的 modelKey（评审 M3）。HappyHorse 把 4 个端点
+   * （text/image/reference/video-to-video）合成 1 个 catalog 条目，靠 per-mode enum 区分。
+   * 缺省（如 Seedance 三模式同 model）→ 用 catalog 的 modelKey。
+   */
+  modelEnum?: string;
 };
 
 export type ModelArchetype = {

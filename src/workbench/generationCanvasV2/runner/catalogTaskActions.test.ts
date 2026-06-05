@@ -62,31 +62,31 @@ function seedanceVideoNode(modeId: string, extraMeta: Record<string, unknown>): 
   }
 }
 
-describe('buildCatalogTaskRequest — C2b 档案模式投影（M2 互斥）', () => {
-  it('首帧模式：残留的 lastFrameUrl 不进 extras（不会触发 §2 坑2 的 422）', () => {
-    const node = seedanceVideoNode('first', { firstFrameUrl: 'F.png', lastFrameUrl: 'L.png' })
-    const { request } = buildCatalogTaskRequest(node)
-    expect(request.extras?.firstFrameUrl).toBe('F.png')
-    expect(request.extras?.lastFrameUrl).toBeFalsy()
+describe('buildCatalogTaskRequest — 档案驱动 input（extras.archetypeInput，M2 互斥）', () => {
+  const archetypeInput = (node: GenerationCanvasNode) =>
+    buildCatalogTaskRequest(node).request.extras?.archetypeInput as Record<string, unknown>
+
+  it('首帧模式：残留的 lastFrameUrl 不进 archetypeInput（不会触发 §2 坑2 的 422）', () => {
+    const ai = archetypeInput(seedanceVideoNode('first', { firstFrameUrl: 'F.png', lastFrameUrl: 'L.png' }))
+    expect(ai.first_frame_url).toBe('F.png')
+    expect(ai.last_frame_url).toBeUndefined()
   })
 
-  it('首尾帧模式：first + last 两帧都进 extras', () => {
-    const node = seedanceVideoNode('firstlast', { firstFrameUrl: 'F.png', lastFrameUrl: 'L.png' })
-    const { request } = buildCatalogTaskRequest(node)
-    expect(request.extras?.firstFrameUrl).toBe('F.png')
-    expect(request.extras?.lastFrameUrl).toBe('L.png')
+  it('首尾帧模式：first + last 两帧都进', () => {
+    const ai = archetypeInput(seedanceVideoNode('firstlast', { firstFrameUrl: 'F.png', lastFrameUrl: 'L.png' }))
+    expect(ai.first_frame_url).toBe('F.png')
+    expect(ai.last_frame_url).toBe('L.png')
   })
 
-  it('全能参考模式：角色图数组进 extras（按序），残留的 firstFrameUrl 不进（互斥含数组）', () => {
-    const node = seedanceVideoNode('omni', {
+  it('全能参考模式：角色图数组进（按序），残留的 firstFrameUrl 不进（互斥含数组）', () => {
+    const ai = archetypeInput(seedanceVideoNode('omni', {
       referenceImageUrls: ['c1.png', 'c2.png'],
       referenceVideoUrls: ['v1.mp4'],
       firstFrameUrl: 'stale.png',
-    })
-    const { request } = buildCatalogTaskRequest(node)
-    expect(request.extras?.referenceImageUrls).toEqual(['c1.png', 'c2.png'])
-    expect(request.extras?.referenceVideoUrls).toEqual(['v1.mp4'])
-    expect(request.extras?.firstFrameUrl).toBeFalsy()
+    }))
+    expect(ai.reference_image_urls).toEqual(['c1.png', 'c2.png'])
+    expect(ai.reference_video_urls).toEqual(['v1.mp4'])
+    expect(ai.first_frame_url).toBeUndefined()
   })
 })
 

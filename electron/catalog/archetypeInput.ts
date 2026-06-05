@@ -7,7 +7,7 @@
 //
 // **M2 互斥**：只有非空值才进结果——渲染层 catalogTaskActions 已把非当前模式的残留键投影掉
 // （置 undefined），到这里它们就是空，自然不入 body。
-import { firstString, type JsonRecord } from "../jsonUtils";
+import { firstString, isJsonRecord, type JsonRecord } from "../jsonUtils";
 
 function stringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -16,9 +16,15 @@ function stringArray(value: unknown): string[] {
 
 /**
  * 从 extras 构建参考相关的 snake 参数。只放有值的键（M2：空 = 不进 body）。
- * `reference_images`（旧的通用参考图数组）保持「总在」语义以兼容既有非档案模型，不破坏。
+ *
+ * 认得档案的模型：renderer 已据当前模式把完整 snake input 打好放进 `extras.archetypeInput`
+ * （含 per-mode enum + 互斥投影，见 archetypeMeta.buildArchetypeInputParams）——这里**原样采用**，
+ * 是单一来源。非档案模型：从 camelCase extras 现场映射（兼容既有 onboarding 模型，不破坏）。
  */
 export function referenceInputParams(extras: JsonRecord): JsonRecord {
+  if (isJsonRecord(extras.archetypeInput)) {
+    return { ...extras.archetypeInput };
+  }
   const out: JsonRecord = {};
   const firstFrame = firstString(extras.firstFrameUrl);
   const lastFrame = firstString(extras.lastFrameUrl);

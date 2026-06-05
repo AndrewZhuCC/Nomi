@@ -27,13 +27,25 @@ describe("applyBuiltinSeeds", () => {
     expect(mapping?.query?.path).toBe("/api/v1/jobs/recordInfo");
   });
 
+  it("空目录：补齐 HappyHorse 模型 + (kie, text_to_video) mapping（C4）", () => {
+    const { state } = applyBuiltinSeeds(emptyCatalog(), NOW);
+    const model = state.models.find((m) => m.modelKey === "happyhorse");
+    expect(model).toMatchObject({ vendorKey: "kie", kind: "video", enabled: true });
+    expect(model?.meta).toMatchObject({ archetypeId: "happyhorse" });
+    const mapping = state.mappings.find((mp) => mp.vendorKey === "kie" && mp.taskKind === "text_to_video");
+    expect(mapping?.enabled).toBe(true);
+    expect(mapping?.create.path).toBe("/api/v1/jobs/createTask");
+  });
+
   it("幂等：再次应用不重复添加、changed=false", () => {
     const first = applyBuiltinSeeds(emptyCatalog(), NOW);
     const second = applyBuiltinSeeds(first.state, NOW);
     expect(second.changed).toBe(false);
     expect(second.state.vendors.filter((v) => v.key === "kie")).toHaveLength(1);
     expect(second.state.models.filter((m) => m.modelKey === "bytedance/seedance-2")).toHaveLength(1);
+    expect(second.state.models.filter((m) => m.modelKey === "happyhorse")).toHaveLength(1);
     expect(second.state.mappings.filter((mp) => mp.vendorKey === "kie" && mp.taskKind === "image_to_video")).toHaveLength(1);
+    expect(second.state.mappings.filter((mp) => mp.vendorKey === "kie" && mp.taskKind === "text_to_video")).toHaveLength(1);
   });
 
   it("存在即跳过：不覆盖用户已有的同 key 记录", () => {

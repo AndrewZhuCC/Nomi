@@ -152,6 +152,11 @@ export function archetypeModeParams(mode: ArchetypeMode): ModelParameterControl[
   return mode.params
 }
 
+/** 当前模式的 per-mode model enum（HappyHorse 4 端点合 1 靠它；Seedance 各模式同 model → null）。 */
+export function archetypeModeModelEnum(archetype: ModelArchetype, meta: Record<string, unknown> | undefined): string | null {
+  return currentArchetypeMode(archetype, meta).modelEnum ?? null
+}
+
 /**
  * 切到 nextModeId：只改 node.meta.archetype.modeId（参考值全局保留，不搬不清）。返回**整份新 meta**。
  * 互斥不在这里发生——发生在传输投影（projectArchetypeFrameExtras）。这样切回时照片还在。
@@ -178,29 +183,42 @@ export function ensureArchetypeNodeMeta(
   return applyArchetypeModeSwitch(meta, archetype, archetype.defaultModeId)
 }
 
-/**
- * 该档案所有模式可能写入的受管键（frame url 键 + 数组槽 metaKey）。请求构建时把**非当前模式**的
- * 这些键显式置 undefined，挡住 `...meta` 整包灌时别的模式的残留值泄露进 body（M2）。
- */
-export function archetypeManagedReferenceKeys(archetype: ModelArchetype): string[] {
-  const keys = new Set<string>()
-  for (const mode of archetype.modes) {
-    for (const slot of mode.slots) {
-      const flat = FRAME_SLOT_FLAT[slot.kind]
-      if (flat) keys.add(flat.urlKey)
-      const arr = ARRAY_SLOT_ROUTE[slot.kind]
-      if (arr) keys.add(arr.metaKey)
-    }
-  }
-  return Array.from(keys)
+/** 单图 frame 槽（含 source_video）在 meta 里的存储键。source_video UI 本轮从简（meta 直存）。 */
+const SINGLE_SLOT_META_KEY: Partial<Record<ArchetypeReferenceSlotKind, string>> = {
+  first_frame: 'firstFrameUrl',
+  last_frame: 'lastFrameUrl',
+  source_video: 'sourceVideoUrl',
+}
+
+/** 缺省的 API 输入键（模型契约，供应商无关）。slot.inputKey 可覆盖。 */
+const DEFAULT_INPUT_KEY: Record<ArchetypeReferenceSlotKind, string> = {
+  first_frame: 'first_frame_url',
+  last_frame: 'last_frame_url',
+  image_ref: 'reference_image_urls',
+  video_ref: 'reference_video_urls',
+  audio_ref: 'reference_audio_urls',
+  source_video: 'video_url',
+}
+const DEFAULT_AS_ARRAY: Record<ArchetypeReferenceSlotKind, boolean> = {
+  first_frame: false, last_frame: false, source_video: false,
+  image_ref: true, video_ref: true, audio_ref: true,
+}
+
+function slotInputKey(slot: { kind: ArchetypeReferenceSlotKind; inputKey?: string }): string {
+  return slot.inputKey ?? DEFAULT_INPUT_KEY[slot.kind]
+}
+function slotAsArray(slot: { kind: ArchetypeReferenceSlotKind; asArray?: boolean }): boolean {
+  return slot.asArray ?? DEFAULT_AS_ARRAY[slot.kind]
 }
 
 /**
- * **传输投影（M2 互斥）**：只把**当前模式声明的**参考键（frame url + 数组 metaKey）放进请求 extras，
- * 残留的别的模式的键不进 body（§2 坑2，避免 Seedance 三模式混用导致 422）。frame 用 references
- * （画布连线）优先、否则 meta 全局值；数组槽 meta-only。
+ * **档案驱动的 input 构建（M1 单源 + M2 互斥 + M3 enum 覆盖）**：renderer 据当前模式把参考值打成
+ * 最终的**通用 snake input 参数**（key = slot 的 API 名，值 = 标量或数组）。只含当前模式声明的键
+ * → 别的模式的残留键根本不进结果（M2，§2 坑2）。供应商 mapping body 直接读 request.params.<key>
+ * （kie 文档的尾随空格 quirk 在 kie body 单独照抄，§2 坑1）。返回对象放进 extras.archetypeInput，
+ * runtime 原样铺进 params（electron/catalog/archetypeInput）。
  */
-export function projectArchetypeReferenceExtras(
+export function buildArchetypeInputParams(
   meta: Record<string, unknown>,
   archetype: ModelArchetype,
   references?: { firstFrameUrl?: string | null; lastFrameUrl?: string | null },
@@ -208,21 +226,24 @@ export function projectArchetypeReferenceExtras(
   const mode = currentArchetypeMode(archetype, meta)
   const out: Record<string, string | string[]> = {}
   for (const slot of mode.slots) {
-    const flat = FRAME_SLOT_FLAT[slot.kind]
-    if (flat) {
-      const fromRef = flat.urlKey === 'firstFrameUrl' ? references?.firstFrameUrl
-        : flat.urlKey === 'lastFrameUrl' ? references?.lastFrameUrl
-        : undefined
-      const raw = (typeof fromRef === 'string' && fromRef.trim()) ? fromRef
-        : (typeof meta[flat.urlKey] === 'string' ? (meta[flat.urlKey] as string) : '')
-      if (raw.trim()) out[flat.urlKey] = raw.trim()
-      continue
-    }
+    const inputKey = slotInputKey(slot)
+    const asArray = slotAsArray(slot)
     const arr = ARRAY_SLOT_ROUTE[slot.kind]
     if (arr) {
       const list = readArchetypeArray(meta, arr.metaKey)
-      if (list.length) out[arr.metaKey] = list
+      if (list.length) out[inputKey] = list
+      continue
     }
+    const metaKey = SINGLE_SLOT_META_KEY[slot.kind]
+    if (!metaKey) continue
+    const fromRef = metaKey === 'firstFrameUrl' ? references?.firstFrameUrl
+      : metaKey === 'lastFrameUrl' ? references?.lastFrameUrl
+      : undefined
+    const raw = (typeof fromRef === 'string' && fromRef.trim()) ? fromRef.trim()
+      : (typeof meta[metaKey] === 'string' ? (meta[metaKey] as string).trim() : '')
+    if (raw) out[inputKey] = asArray ? [raw] : raw
   }
+  // M3：per-mode enum 覆盖（HappyHorse）。Seedance 各模式同 model → 不带，body 用 {{model.modelKey}}。
+  if (mode.modelEnum) out.model = mode.modelEnum
   return out
 }
