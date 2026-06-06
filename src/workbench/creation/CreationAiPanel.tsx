@@ -1,6 +1,6 @@
 import React from 'react'
 import { IconCursorText, IconFilePlus, IconMovie, IconReplace, IconSend2, IconSparkles } from '@tabler/icons-react'
-import { NomiAILabel, NomiLoadingMark, WorkbenchButton, WorkbenchIconButton } from '../../design'
+import { NomiAILabel, NomiLoadingMark, NomiSelect, WorkbenchButton, WorkbenchIconButton } from '../../design'
 import { NomiMarkdown } from '../common/NomiMarkdown'
 import { cn } from '../../utils/cn'
 import { runWorkbenchAgent, workbenchSessionKey, type ToolCallEvent } from '../ai/workbenchAgentRunner'
@@ -408,30 +408,14 @@ export default function CreationAiPanel(): JSX.Element {
           onKeyDown={(event) => handleAiComposerKeyDown(event, () => void send())}
         />
         <div className={cn('workbench-creation-ai__actions', 'flex items-center justify-between gap-2')}>
-          <label
-            className={cn(
-              'workbench-creation-ai__mode-picker',
-              'min-w-0 h-[30px] inline-flex items-center gap-[6px] px-2 cursor-pointer',
-            )}
+          <NomiSelect
+            ariaLabel="创作模式"
+            leadingLabel="模式"
             title={activeMode.description}
-          >
-            <span className={cn('workbench-creation-ai__mode-label', 'shrink-0 whitespace-nowrap')}>模式</span>
-            <select
-              className={cn(
-                'workbench-creation-ai__mode-select',
-                'min-w-[70px] border-0 bg-transparent font-inherit outline-none cursor-pointer',
-              )}
-              aria-label="创作模式"
-              value={activeMode.id}
-              onChange={(event) => setModeId(event.currentTarget.value as CreationAiModeId)}
-            >
-              {CREATION_AI_MODES.map((mode) => (
-                <option key={mode.id} value={mode.id}>
-                  {mode.shortLabel}
-                </option>
-              ))}
-            </select>
-          </label>
+            value={activeMode.id}
+            options={CREATION_AI_MODES.map((mode) => ({ value: mode.id, label: mode.shortLabel }))}
+            onChange={(value) => setModeId(value as CreationAiModeId)}
+          />
           <WorkbenchButton
             className={cn(
               'workbench-creation-ai__storyboard-chip',

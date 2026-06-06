@@ -621,7 +621,6 @@
 }
 
 .workbench-creation-ai__mode,
-.workbench-creation-ai__mode-picker,
 .app-ai-chat-dialog.tc-ai-chat .tc-ai-chat__experience-toggle,
 .app-ai-chat-dialog.tc-ai-chat .tc-ai-chat__replicate-action,
 .workbench-creation-ai__message-action {
@@ -633,38 +632,6 @@
   box-shadow: none !important;
   font-size: 12px;
   font-weight: 500;
-}
-
-.workbench-creation-ai__mode-picker {
-  height: 25px;
-  max-width: min(210px, 100%);
-  padding: 0;
-  border: 0 !important;
-  background: transparent !important;
-  color: var(--nomi-ink-40) !important;
-}
-
-.workbench-creation-ai__mode-picker:hover {
-  border-color: color-mix(in srgb, var(--workbench-accent) 18%, transparent) !important;
-  background: var(--workbench-accent-soft) !important;
-  color: var(--workbench-accent) !important;
-}
-
-.workbench-creation-ai__mode-label {
-  color: inherit;
-  font-size: 11.5px;
-  font-weight: 500;
-}
-
-.workbench-creation-ai__mode-select {
-  color: var(--nomi-ink-80);
-  font-size: 12px;
-  font-weight: 500;
-  height: 25px;
-  padding: 3px 6px;
-  border: 1px solid var(--nomi-line-soft);
-  border-radius: var(--nomi-radius-sm);
-  background: var(--nomi-ink-05);
 }
 
 .workbench-creation-ai__message-action {

@@ -1,5 +1,6 @@
 import React from 'react'
 import { cn } from '../../../utils/cn'
+import { NomiSelect } from '../../../design'
 import { getDesktopActiveProjectId } from '../../../desktop/activeProject'
 import { deriveGenerationModelCatalogStatus, findModelOptionByIdentifier, useGenerationModelOptionsState } from '../adapters/modelOptionsAdapter'
 import {
@@ -33,7 +34,6 @@ import {
   getSlotThumbUrl,
   imageCatalogReferenceSlot,
   isParameterControl,
-  optionKey,
   optionLabel,
   optionValue,
   parseControlInput,
@@ -488,80 +488,77 @@ export default function NodeParameterControls({
         </button>
       )
     }
-    // 内联参数 pill：和模型芯片同族（label + 无边框 select/input + ▾），横排在底栏。
-    // 不限宽、不截断：参数值要看全（卡宽内容驱动，select 多宽卡就多宽，仍一行）。
-    const inlineSelectClass = cn('appearance-none bg-transparent border-0 outline-0 text-caption text-nomi-ink-80 cursor-pointer')
+    // 内联参数：统一用 NomiSelect（设计语言一致、对勾在右）；自由数值/文本无候选项的才保留输入 pill。
     const renderInlineParam = (control: DynamicModelControl): JSX.Element => {
-      const pill = (children: React.ReactNode, withChevron = true) => (
-        <label key={control.key} className={cn('inline-flex items-center gap-1 h-7 pl-2.5 pr-2 rounded-pill border border-nomi-line bg-nomi-paper min-w-0 focus-within:border-nomi-accent')}>
-          <span className={cn('shrink-0 text-micro leading-none text-nomi-ink-40')}>{control.label}</span>
-          {children}
-          {withChevron ? <span className={cn('shrink-0 text-nomi-ink-40 text-micro leading-none pointer-events-none')} aria-hidden>▾</span> : null}
-        </label>
-      )
       if (!isParameterControl(control)) {
-        return pill(
-          <select className={inlineSelectClass} aria-label={control.label} value={catalogControlInitialValue(control, meta)} onChange={(e) => handleCatalogControlChange(control, e.target.value)}>
-            {control.options.map((o) => <option key={optionKey(o)} value={optionValue(o)}>{optionLabel(o)}</option>)}
-          </select>,
+        return (
+          <NomiSelect
+            key={control.key}
+            ariaLabel={control.label}
+            leadingLabel={control.label}
+            value={catalogControlInitialValue(control, meta)}
+            options={control.options.map((o) => ({ value: optionValue(o), label: optionLabel(o) }))}
+            onChange={(v) => handleCatalogControlChange(control, v)}
+          />
         )
       }
       if (control.type === 'boolean') {
-        return pill(
-          <select className={inlineSelectClass} aria-label={control.label} value={controlInitialValue(control, meta) || 'false'} onChange={(e) => handleParameterControlChange(control, e.target.value)}>
-            <option value="true">开</option>
-            <option value="false">关</option>
-          </select>,
+        return (
+          <NomiSelect
+            key={control.key}
+            ariaLabel={control.label}
+            leadingLabel={control.label}
+            value={controlInitialValue(control, meta) || 'false'}
+            options={[{ value: 'true', label: '开' }, { value: 'false', label: '关' }]}
+            onChange={(v) => handleParameterControlChange(control, v)}
+          />
         )
       }
       if (control.options.length > 0) {
-        return pill(
-          <select className={inlineSelectClass} aria-label={control.label} value={controlInitialValue(control, meta)} onChange={(e) => handleParameterControlChange(control, e.target.value)}>
-            {control.options.map((o) => <option key={controlValueToString(o.value)} value={controlValueToString(o.value)}>{formatVideoOptionLabel(o.label, o.priceLabel)}</option>)}
-          </select>,
+        return (
+          <NomiSelect
+            key={control.key}
+            ariaLabel={control.label}
+            leadingLabel={control.label}
+            value={controlInitialValue(control, meta)}
+            options={control.options.map((o) => ({ value: controlValueToString(o.value), label: formatVideoOptionLabel(o.label, o.priceLabel) }))}
+            onChange={(v) => handleParameterControlChange(control, v)}
+          />
         )
       }
-      return pill(
-        <input
-          className={cn('appearance-none bg-transparent border-0 outline-0 text-caption text-nomi-ink-80 min-w-0 w-[56px]')}
-          aria-label={control.label}
-          type={control.type === 'number' ? 'number' : 'text'}
-          value={controlInitialValue(control, meta)}
-          min={control.min}
-          max={control.max}
-          step={control.step}
-          placeholder={control.placeholder}
-          onChange={(e) => handleParameterControlChange(control, e.target.value)}
-        />,
-        false,
+      // 自由数值/文本（无候选项，如步数/seed）：保留小输入 pill（非下拉）。
+      return (
+        <label key={control.key} className={cn('inline-flex items-center gap-1 h-7 pl-2.5 pr-2 rounded-pill border border-nomi-line bg-nomi-paper min-w-0 focus-within:border-nomi-accent')}>
+          <span className={cn('shrink-0 text-micro leading-none text-nomi-ink-40')}>{control.label}</span>
+          <input
+            className={cn('appearance-none bg-transparent border-0 outline-0 text-caption text-nomi-ink-80 min-w-0 w-[56px]')}
+            aria-label={control.label}
+            type={control.type === 'number' ? 'number' : 'text'}
+            value={controlInitialValue(control, meta)}
+            min={control.min}
+            max={control.max}
+            step={control.step}
+            placeholder={control.placeholder}
+            onChange={(e) => handleParameterControlChange(control, e.target.value)}
+          />
+        </label>
       )
     }
     return (
       <div className={cn('generation-canvas-v2-node__params--parameters', 'flex flex-nowrap items-center gap-2')}>
-        {/* 模型芯片：一个 pill 内含 名称 + 模板/通用徽标 + 下拉箭头（样张 v4：徽标嵌在芯片内） */}
-        <div className={cn('inline-flex items-center gap-1 h-7 pl-3 pr-2.5 rounded-pill border border-nomi-line bg-nomi-paper min-w-0 focus-within:border-nomi-accent')}>
-          <select
-            className={cn('appearance-none bg-transparent border-0 outline-0 text-caption text-nomi-ink-80 cursor-pointer truncate min-w-0 max-w-[150px]')}
-            aria-label="模型"
-            value={selectedModelOption?.value || ''}
-            onChange={(event) => handleModelChange(event.target.value)}
-          >
-            <option value="">选择模型</option>
-            {modelOptions.map((option) => (
-              <option key={option.value || 'auto'} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-          {selectedModelOption ? (
-            <span
-              className={cn(
-                'shrink-0 text-micro leading-none px-1.5 py-[1px] rounded-pill',
-                archetype ? 'bg-nomi-accent-soft text-nomi-accent' : 'bg-nomi-ink-10 text-nomi-ink-60',
-              )}
-              title={archetype ? '认得这个模型 · 用内置模板' : '未识别 · 通用回退（按接入文档原样展示）'}
-            >{archetype ? '模板' : '通用'}</span>
-          ) : null}
-          <span className={cn('shrink-0 text-nomi-ink-40 text-micro leading-none pointer-events-none')} aria-hidden>▾</span>
-        </div>
+        {/* 模型芯片：NomiSelect——值右侧嵌「模板/通用」徽标，选项里每个模型也标注。 */}
+        <NomiSelect
+          ariaLabel="模型"
+          placeholder="选择模型"
+          triggerMaxWidth={150}
+          value={selectedModelOption?.value || ''}
+          triggerBadge={selectedModelOption ? { text: archetype ? '模板' : '通用', tone: archetype ? 'accent' : 'muted' } : undefined}
+          options={modelOptions.map((option) => {
+            const hasArchetype = Boolean(resolveArchetypeForOption(option))
+            return { value: option.value, label: option.label, trailing: hasArchetype ? '模板' : '通用', trailingTone: hasArchetype ? 'accent' as const : 'muted' as const }
+          })}
+          onChange={(v) => handleModelChange(v)}
+        />
         {/* 该模型的标量参数：横排内联，每个带标签，全可见 */}
         {renderedControls.map((control) => renderInlineParam(control))}
       </div>

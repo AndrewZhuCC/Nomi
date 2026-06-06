@@ -1,5 +1,5 @@
 import { IconSend2, IconX } from '@tabler/icons-react'
-import { NomiAILabel, WorkbenchButton, WorkbenchIconButton } from '../../../design'
+import { NomiAILabel, NomiSelect, WorkbenchButton, WorkbenchIconButton } from '../../../design'
 import React from 'react'
 import { cn } from '../../../utils/cn'
 import {
@@ -558,23 +558,18 @@ export default function CanvasAssistantPanel({
         />
         <div className={cn('flex items-center justify-between gap-3')}>
           <div className={cn('flex items-center gap-2 min-w-0')}>
-            <label className={cn('flex items-center gap-[6px]')}>
-              <span className={cn('text-nomi-ink-40 text-[11.5px]')}>模式</span>
-              <select
-                className={cn(
-                  'h-[25px] px-[6px] py-[3px]',
-                  'border border-nomi-line-soft rounded-nomi-sm outline-0',
-                  'bg-nomi-ink-05 text-nomi-ink-80 font-[inherit] text-xs',
-                )}
-                aria-label="AI 模式"
-                value={mode}
-                onChange={(event) => setMode(event.currentTarget.value as 'agent' | 'chat' | 'refine')}
-              >
-                <option value="agent">Agent</option>
-                <option value="chat">问答</option>
-                <option value="refine">润色</option>
-              </select>
-            </label>
+            <NomiSelect
+              ariaLabel="AI 模式"
+              leadingLabel="模式"
+              size="xs"
+              value={mode}
+              options={[
+                { value: 'agent', label: 'Agent' },
+                { value: 'chat', label: '问答' },
+                { value: 'refine', label: '润色' },
+              ]}
+              onChange={(value) => setMode(value as 'agent' | 'chat' | 'refine')}
+            />
             <AssistantModelPicker />
           </div>
           <WorkbenchIconButton

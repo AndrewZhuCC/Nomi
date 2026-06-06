@@ -1,6 +1,6 @@
 import React from 'react'
 import { IconDownload, IconPlayerPause, IconPlayerPlay, IconRefresh, IconZoomIn, IconZoomOut } from '@tabler/icons-react'
-import { NomiLoadingMark, WorkbenchButton, WorkbenchIconButton } from '../../design'
+import { NomiLoadingMark, NomiSelect, WorkbenchButton, WorkbenchIconButton } from '../../design'
 import { cn } from '../../utils/cn'
 import { useWorkbenchStore } from '../workbenchStore'
 import type { TimelineClip, TimelineState } from '../timeline/timelineTypes'
@@ -356,57 +356,29 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
             'workbench-preview-player__control-separator',
             'w-px h-5 bg-[var(--workbench-border-soft)]',
           )} aria-hidden="true" />
-          <div className={cn(
-            'workbench-preview-player__select-control',
-            'flex-none inline-flex items-center gap-1 h-6 px-2.5 rounded-full bg-transparent hover:bg-[var(--workbench-hover)]',
-          )}>
-            <span className={cn(
-              'workbench-preview-player__control-label',
-              'text-[var(--workbench-muted)] text-[11px] font-bold whitespace-nowrap',
-            )}>画幅</span>
-            <select
-              className={cn(
-                'workbench-preview-player__select',
-                'min-w-[56px] h-[22px] border-0 rounded-[5px] bg-transparent',
-                'text-[var(--workbench-ink)] text-[11px] font-bold outline-none cursor-pointer',
-              )}
-              aria-label="预览画幅"
-              value={aspectRatio}
-              onChange={(event) => setPreviewAspectRatio(event.currentTarget.value as PreviewAspectRatio)}
-            >
-              {PREVIEW_RATIOS.map((ratio) => (
-                <option key={ratio.value} value={ratio.value}>
-                  {ratio.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <NomiSelect
+            ariaLabel="预览画幅"
+            leadingLabel="画幅"
+            size="xs"
+            value={aspectRatio}
+            options={PREVIEW_RATIOS.map((ratio) => ({ value: ratio.value, label: ratio.label }))}
+            onChange={(value) => setPreviewAspectRatio(value as PreviewAspectRatio)}
+          />
           <div className={cn(
             'workbench-preview-player__control-separator',
             'w-px h-5 bg-[var(--workbench-border-soft)]',
           )} aria-hidden="true" />
-          <div className={cn(
-            'workbench-preview-player__select-control',
-            'flex-none inline-flex items-center gap-1 h-6 px-2.5 rounded-full bg-transparent hover:bg-[var(--workbench-hover)]',
-          )}>
-            <span className={cn(
-              'workbench-preview-player__control-label',
-              'text-[var(--workbench-muted)] text-[11px] font-bold whitespace-nowrap',
-            )}>显示</span>
-            <select
-              className={cn(
-                'workbench-preview-player__select',
-                'min-w-[56px] h-[22px] border-0 rounded-[5px] bg-transparent',
-                'text-[var(--workbench-ink)] text-[11px] font-bold outline-none cursor-pointer',
-              )}
-              aria-label="画面适配"
-              value={fitMode}
-              onChange={(event) => setFitMode(event.currentTarget.value as PreviewFitMode)}
-            >
-              <option value="contain">适应</option>
-              <option value="cover">填充</option>
-            </select>
-          </div>
+          <NomiSelect
+            ariaLabel="画面适配"
+            leadingLabel="显示"
+            size="xs"
+            value={fitMode}
+            options={[
+              { value: 'contain', label: '适应' },
+              { value: 'cover', label: '填充' },
+            ]}
+            onChange={(value) => setFitMode(value as PreviewFitMode)}
+          />
           <div className={cn(
             'workbench-preview-player__control-separator',
             'w-px h-5 bg-[var(--workbench-border-soft)]',
