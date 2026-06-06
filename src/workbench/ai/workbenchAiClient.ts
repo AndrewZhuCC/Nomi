@@ -15,6 +15,9 @@ export type WorkbenchAiRequest = {
   skillKey: string
   skillName: string
   mode?: 'chat' | 'auto'
+  /** 助手模型偏好（用户选的）：透传给后端 chooseTextModel 优先用。 */
+  agentModelKey?: string
+  agentVendorKey?: string
 }
 
 export type WorkbenchAiStreamHandlers = {
@@ -40,6 +43,7 @@ function buildWorkbenchAiPayload(input: WorkbenchAiRequest) {
     },
     mode: input.mode || 'auto',
     temperature: 0.7,
+    ...(input.agentModelKey ? { agentModelKey: input.agentModelKey, agentVendorKey: input.agentVendorKey } : {}),
   }
 }
 

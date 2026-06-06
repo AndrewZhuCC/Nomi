@@ -15,6 +15,12 @@ import {
   STORYBOARD_PLANNING_EVENT,
   type StoryboardPlanningRequest,
 } from '../agent/storyboardLauncher'
+import {
+  buildFixationPlanningMessage,
+  FIXATION_PLANNER_SKILL,
+  FIXATION_PLANNING_EVENT,
+  type FixationPlanningRequest,
+} from '../agent/fixationLauncher'
 import AgentPlanCard, { summarizeAgentPlan } from './AgentPlanCard'
 import { getGenerationNodeDefaultTitle } from '../model/generationNodeKinds'
 import type { GenerationNodeKind } from '../model/generationCanvasTypes'
@@ -22,6 +28,7 @@ import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { AiReplyActionButton } from '../../ai/AiReplyActionButton'
 import { handleAiComposerKeyDown } from '../../ai/aiComposerKeyboard'
 import { openWorkbenchModelIntegration, WorkbenchAiHeaderActions } from '../../ai/WorkbenchAiHeaderActions'
+import AssistantModelPicker from '../../ai/AssistantModelPicker'
 
 type PendingToolCall = {
   toolCallId: string
@@ -312,6 +319,24 @@ export default function CanvasAssistantPanel({
     return () => window.removeEventListener(STORYBOARD_PLANNING_EVENT, handler as EventListener)
   }, [setCollapsed, submitAgentMessage])
 
+  // Tier2 定妆/定景：创作区「💄 定妆」触发 → 跑 fixation planner skill，按剧本建角色/场景卡 +
+  // 注入身份板提示词（与 storyboard 同构）。
+  React.useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<FixationPlanningRequest>).detail
+      const storyText = detail?.storyText?.trim() || ''
+      if (!storyText) return
+      setCollapsed(false)
+      const message = buildFixationPlanningMessage(storyText)
+      submitAgentMessage(message, {
+        skill: FIXATION_PLANNER_SKILL,
+        displayMessage: `💄 定妆\n\n${storyText}`,
+      })
+    }
+    window.addEventListener(FIXATION_PLANNING_EVENT, handler as EventListener)
+    return () => window.removeEventListener(FIXATION_PLANNING_EVENT, handler as EventListener)
+  }, [setCollapsed, submitAgentMessage])
+
   const handleNewConversation = React.useCallback(() => {
     setPendingToolCalls([])
     resetConversation()
@@ -532,23 +557,26 @@ export default function CanvasAssistantPanel({
           disabled={busy}
         />
         <div className={cn('flex items-center justify-between gap-3')}>
-          <label className={cn('flex items-center gap-[6px]')}>
-            <span className={cn('text-nomi-ink-40 text-[11.5px]')}>模式</span>
-            <select
-              className={cn(
-                'h-[25px] px-[6px] py-[3px]',
-                'border border-nomi-line-soft rounded-nomi-sm outline-0',
-                'bg-nomi-ink-05 text-nomi-ink-80 font-[inherit] text-xs',
-              )}
-              aria-label="AI 模式"
-              value={mode}
-              onChange={(event) => setMode(event.currentTarget.value as 'agent' | 'chat' | 'refine')}
-            >
-              <option value="agent">Agent</option>
-              <option value="chat">问答</option>
-              <option value="refine">润色</option>
-            </select>
-          </label>
+          <div className={cn('flex items-center gap-2 min-w-0')}>
+            <label className={cn('flex items-center gap-[6px]')}>
+              <span className={cn('text-nomi-ink-40 text-[11.5px]')}>模式</span>
+              <select
+                className={cn(
+                  'h-[25px] px-[6px] py-[3px]',
+                  'border border-nomi-line-soft rounded-nomi-sm outline-0',
+                  'bg-nomi-ink-05 text-nomi-ink-80 font-[inherit] text-xs',
+                )}
+                aria-label="AI 模式"
+                value={mode}
+                onChange={(event) => setMode(event.currentTarget.value as 'agent' | 'chat' | 'refine')}
+              >
+                <option value="agent">Agent</option>
+                <option value="chat">问答</option>
+                <option value="refine">润色</option>
+              </select>
+            </label>
+            <AssistantModelPicker />
+          </div>
           <WorkbenchIconButton
             type="submit"
             className={cn(

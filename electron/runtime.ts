@@ -2200,9 +2200,12 @@ export async function fetchTaskResult(payload: unknown): Promise<{ vendor: strin
   };
 }
 
-function chooseTextModel(): { vendor: Vendor; model: Model; apiKey: string } {
+function chooseTextModel(prefModelKey?: string): { vendor: Vendor; model: Model; apiKey: string } {
   const state = readCatalog();
-  for (const model of state.models.filter((item) => item.kind === "text" && item.enabled)) {
+  const texts = state.models.filter((item) => item.kind === "text" && item.enabled);
+  // 用户在助手面板选的模型排第一（仍保留其余作回退，避免选了不可用的就彻底没法跑）。
+  const ordered = prefModelKey ? [...texts].sort((a, b) => (a.modelKey === prefModelKey ? -1 : 0) - (b.modelKey === prefModelKey ? -1 : 0)) : texts;
+  for (const model of ordered) {
     const vendor = state.vendors.find((item) => item.key === model.vendorKey && item.enabled);
     const apiKey = decryptApiKeyRecord(state.apiKeysByVendor[model.vendorKey]);
     if (vendor && (vendor.authType === "none" || apiKey)) return { vendor, model, apiKey };
@@ -2430,6 +2433,8 @@ export type RunAgentChatV2Payload = {
   chatContext?: unknown;
   mode?: string;
   temperature?: number;
+  agentModelKey?: string; // 助手模型偏好（用户选的）：优先用，否则回退第一个可用 text 模型
+  agentVendorKey?: string;
   /**
    * Shared conversation memory key. Both workbench panels use
    * `nomi:workbench:<projectId|local>` so the agent remembers across turns and
@@ -2475,7 +2480,7 @@ export async function runAgentChatV2(
   payload: RunAgentChatV2Payload,
   hooks: AgentChatV2Hooks,
 ): Promise<{ id: string; text: string; finishReason: string; usage?: unknown }> {
-  const { vendor, model, apiKey } = chooseTextModel();
+  const { vendor, model, apiKey } = chooseTextModel(trim(payload.agentModelKey));
   const systemPrompt = trim(payload.systemPrompt as unknown as JsonRecord["systemPrompt"]);
   const skillSystemPrompt = buildSkillSystemPrompt(payload as unknown as JsonRecord);
   // 收口 sanitize（P0-6）：送进 LLM 的 user/system 文本 ASCII 可移植化（防 Moonshot 等 tokenizer 异常）。
@@ -2516,12 +2521,7 @@ export async function runAgentChatV2(
     onError: ({ error }) => hooks.emit({ type: "error", message: error instanceof Error ? error.message : String(error) }),
   });
 
-  const { finalText, finalFinish, finalUsage, ok } = await consumeAgentStreamWithTimeout(
-    result,
-    abortController,
-    hooks,
-    { firstChunkTimeoutMs: 90_000, label: `${vendor?.key}/${model?.modelKey}/${resolvedSkillKey}` },
-  );
+  const { finalText, finalFinish, finalUsage, ok } = await consumeAgentStreamWithTimeout(result, abortController, hooks, { firstChunkTimeoutMs: 90_000, label: `${vendor?.key}/${model?.modelKey}/${resolvedSkillKey}` });
 
   // 仅成功时落历史（失败/中断不污染下轮上下文）。
   if (ok && sessionKey) {

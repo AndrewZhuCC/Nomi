@@ -1,5 +1,5 @@
 import React from 'react'
-import { IconCursorText, IconFilePlus, IconMovie, IconReplace, IconSend2 } from '@tabler/icons-react'
+import { IconCursorText, IconFilePlus, IconMovie, IconReplace, IconSend2, IconSparkles } from '@tabler/icons-react'
 import { NomiAILabel, NomiLoadingMark, WorkbenchButton, WorkbenchIconButton } from '../../design'
 import { NomiMarkdown } from '../common/NomiMarkdown'
 import { cn } from '../../utils/cn'
@@ -11,6 +11,7 @@ import type { WorkbenchAiMessage } from '../ai/workbenchAiTypes'
 import { openWorkbenchModelIntegration, WorkbenchAiHeaderActions } from '../ai/WorkbenchAiHeaderActions'
 import { useWorkbenchStore } from '../workbenchStore'
 import { requestStoryboardPlanning } from '../generationCanvasV2/agent/storyboardLauncher'
+import { requestFixationPlanning } from '../generationCanvasV2/agent/fixationLauncher'
 import {
   buildCreationAiPrompt,
   CREATION_AI_MODES,
@@ -143,6 +144,27 @@ export default function CreationAiPanel(): JSX.Element {
     // dispatching the CustomEvent it listens for.
     window.setTimeout(() => {
       requestStoryboardPlanning({ storyText, source: 'creation-ai-panel' })
+    }, 60)
+  }, [documentText, selectedText, setDraft, setError, setMessages, setWorkspaceMode])
+
+  // Tier2 定妆：把剧本交给 AI，按剧本为主要角色/场景建卡 + 注入身份板提示词（与拆镜头同构）。
+  const launchFixationPlanning = React.useCallback((displayPrompt = '💄 定妆') => {
+    const storyText = (selectedText || documentText).trim()
+    if (!storyText) {
+      setError('先在左侧写一段剧本，再让 AI 按剧本定妆。')
+      return
+    }
+    const now = Date.now()
+    setMessages((prev) => [
+      ...prev,
+      { id: `creation_ai_user_${now}`, role: 'user', content: displayPrompt },
+      { id: `creation_ai_assistant_${now + 1}`, role: 'assistant', content: '已切到生成区，正在让 AI 按剧本为角色/场景定妆。' },
+    ])
+    setDraft('')
+    setError('')
+    setWorkspaceMode('generation')
+    window.setTimeout(() => {
+      requestFixationPlanning({ storyText, source: 'creation-ai-panel' })
     }, 60)
   }, [documentText, selectedText, setDraft, setError, setMessages, setWorkspaceMode])
 
@@ -426,6 +448,23 @@ export default function CreationAiPanel(): JSX.Element {
           >
             <IconMovie size={14} />
             <span>拆镜头</span>
+          </WorkbenchButton>
+          <WorkbenchButton
+            className={cn(
+              'workbench-creation-ai__fixation-chip',
+              'shrink-0 h-[30px] inline-flex items-center gap-[5px] px-2.5',
+              'border border-nomi-line rounded-full bg-nomi-paper',
+              'text-nomi-ink-80 text-[12.5px] font-medium cursor-pointer',
+              'hover:bg-nomi-accent-soft/40 hover:text-nomi-accent hover:border-[color-mix(in_srgb,var(--nomi-accent)_36%,transparent)]',
+              'disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-nomi-paper disabled:hover:text-nomi-ink-80',
+            )}
+            type="button"
+            title="把剧本交给 AI，为主要角色/场景建卡并写好身份板提示词"
+            disabled={sending || !(selectedText || documentText).trim()}
+            onClick={() => launchFixationPlanning('💄 定妆')}
+          >
+            <IconSparkles size={14} />
+            <span>定妆</span>
           </WorkbenchButton>
           <WorkbenchIconButton
             className={cn(

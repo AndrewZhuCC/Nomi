@@ -1,5 +1,6 @@
 import type { AgentsChatResponseDto, AgentChatV2Session } from '../../api/desktopClient'
 import { sendWorkbenchAiMessage } from './workbenchAiClient'
+import { getAssistantModelPref } from './assistantModelPref'
 
 /**
  * One shared agent runner for both workbench panels (创作区 + 生成区).
@@ -60,6 +61,9 @@ export type RunWorkbenchAgentInput = {
 }
 
 export async function runWorkbenchAgent(input: RunWorkbenchAgentInput): Promise<AgentsChatResponseDto> {
+  // 助手模型偏好（用户在助手面板选的）→ 加进 payload，后端 chooseTextModel 优先用它，
+  // 否则回退「第一个可用 text 模型」。两个面板都走这里 → 自动生效，无需各自传。
+  const pref = getAssistantModelPref()
   const request = {
     prompt: input.prompt,
     displayPrompt: input.displayPrompt,
@@ -70,6 +74,7 @@ export async function runWorkbenchAgent(input: RunWorkbenchAgentInput): Promise<
     skillKey: input.skillKey,
     skillName: input.skillName,
     mode: input.mode || ('auto' as const),
+    ...(pref ? { agentModelKey: pref.modelKey, agentVendorKey: pref.vendorKey } : {}),
   }
 
   let activeSession: AgentChatV2Session | null = null
