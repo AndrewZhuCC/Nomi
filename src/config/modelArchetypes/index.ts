@@ -3,12 +3,13 @@ import { SEEDANCE_2_ARCHETYPE, SEEDANCE_2_FAST_ARCHETYPE } from "./seedance";
 import { HAPPYHORSE_ARCHETYPE } from "./happyhorse";
 import { GPT_IMAGE_2_ARCHETYPE } from "./gptImage2";
 import { SEEDREAM_ARCHETYPE } from "./seedream";
+import { NANO_BANANA_ARCHETYPE } from "./nanoBanana";
 import type { ModelArchetype } from "./types";
 
 export type { ModelArchetype, ArchetypeMode, ArchetypeReferenceSlot, ArchetypeReferenceSlotKind, ArchetypeIntent } from "./types";
 
 /** 内置档案注册表。新模型族在这里登记一条。 */
-export const MODEL_ARCHETYPES: readonly ModelArchetype[] = [SEEDANCE_2_ARCHETYPE, SEEDANCE_2_FAST_ARCHETYPE, HAPPYHORSE_ARCHETYPE, GPT_IMAGE_2_ARCHETYPE, SEEDREAM_ARCHETYPE];
+export const MODEL_ARCHETYPES: readonly ModelArchetype[] = [SEEDANCE_2_ARCHETYPE, SEEDANCE_2_FAST_ARCHETYPE, HAPPYHORSE_ARCHETYPE, GPT_IMAGE_2_ARCHETYPE, SEEDREAM_ARCHETYPE, NANO_BANANA_ARCHETYPE];
 
 /** 按 id 取档案。 */
 export function getArchetypeById(id: string | null | undefined): ModelArchetype | null {

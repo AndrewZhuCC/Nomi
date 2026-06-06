@@ -158,6 +158,9 @@ describe("applyBuiltinSeeds", () => {
     // Seedream 伞模型带档案
     const sd = state.models.find((m) => m.modelKey === "seedream");
     expect((sd?.meta as { archetypeId?: string })?.archetypeId).toBe("seedream");
+    // 三个图像模型（GPT/Seedream/Nano Banana）同 image_edit 桶，各路由到自己
+    expect(selectTaskMapping(state.mappings, "kie", "image_edit", "nano-banana")?.modelKey).toBe("nano-banana");
+    expect(editBucket.length).toBeGreaterThanOrEqual(3);
   });
 
   it("存在即跳过：不覆盖用户已有的同 key 记录", () => {

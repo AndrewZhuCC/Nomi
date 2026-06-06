@@ -25,6 +25,7 @@ import {
   isBrokenKieImageMapping,
 } from "./kieGptImage2";
 import { SEEDREAM_EDIT_MAPPING, SEEDREAM_MODEL_SEED, SEEDREAM_T2I_MAPPING } from "./kieSeedream";
+import { NANO_BANANA_EDIT_MAPPING, NANO_BANANA_MODEL_SEED, NANO_BANANA_T2I_MAPPING } from "./kieNanoBanana";
 
 /** 稳定 id：按 (vendor, taskKind, model) 固定，便于幂等与排查。 */
 const SEEDANCE_MAPPING_ID = "seed-kie-seedance2-image_to_video";
@@ -33,6 +34,8 @@ const GPT_IMAGE_2_T2I_MAPPING_ID = "seed-kie-gpt-image-2-text_to_image";
 const GPT_IMAGE_2_I2I_MAPPING_ID = "seed-kie-gpt-image-2-image_edit";
 const SEEDREAM_T2I_MAPPING_ID = "seed-kie-seedream-text_to_image";
 const SEEDREAM_EDIT_MAPPING_ID = "seed-kie-seedream-image_edit";
+const NANO_BANANA_T2I_MAPPING_ID = "seed-kie-nano-banana-text_to_image";
+const NANO_BANANA_EDIT_MAPPING_ID = "seed-kie-nano-banana-image_edit";
 
 /**
  * 所有 curated 内置模型的**单一真相源**（insert + 启动对账共用，和 mapping 同一套思路）。
@@ -50,6 +53,8 @@ const CURATED_MODELS: { modelKey: string; labelZh: string; kind: Model["kind"]; 
   { modelKey: GPT_IMAGE_2_I2I_MODEL_SEED.modelKey, labelZh: GPT_IMAGE_2_I2I_MODEL_SEED.labelZh, kind: GPT_IMAGE_2_I2I_MODEL_SEED.kind, archetypeId: "gpt-image-2" },
   // Seedream（字节）：全新接入，1 个伞模型 + 档案 2 模式（文生图/改图，per-mode enum）。无旧记录，无迁移。
   { modelKey: SEEDREAM_MODEL_SEED.modelKey, labelZh: SEEDREAM_MODEL_SEED.labelZh, kind: SEEDREAM_MODEL_SEED.kind, archetypeId: "seedream" },
+  // Nano Banana（Google）：全新接入，伞模型 + 档案 2 模式（文生图/改图）。
+  { modelKey: NANO_BANANA_MODEL_SEED.modelKey, labelZh: NANO_BANANA_MODEL_SEED.labelZh, kind: NANO_BANANA_MODEL_SEED.kind, archetypeId: "nano-banana" },
 ];
 
 export function applyBuiltinSeeds(
@@ -148,6 +153,8 @@ export function applyBuiltinSeeds(
     // Seedream 与 GPT 同 (kie, text_to_image/image_edit) 桶 → 带 modelKey 精确路由，不撞（selectTaskMapping）。
     { id: SEEDREAM_T2I_MAPPING_ID, taskKind: SEEDREAM_T2I_MAPPING.taskKind, modelKey: SEEDREAM_T2I_MAPPING.modelKey, name: SEEDREAM_T2I_MAPPING.name, create: SEEDREAM_T2I_MAPPING.create, query: SEEDREAM_T2I_MAPPING.query, statusMapping: SEEDREAM_T2I_MAPPING.statusMapping },
     { id: SEEDREAM_EDIT_MAPPING_ID, taskKind: SEEDREAM_EDIT_MAPPING.taskKind, modelKey: SEEDREAM_EDIT_MAPPING.modelKey, name: SEEDREAM_EDIT_MAPPING.name, create: SEEDREAM_EDIT_MAPPING.create, query: SEEDREAM_EDIT_MAPPING.query, statusMapping: SEEDREAM_EDIT_MAPPING.statusMapping },
+    { id: NANO_BANANA_T2I_MAPPING_ID, taskKind: NANO_BANANA_T2I_MAPPING.taskKind, modelKey: NANO_BANANA_T2I_MAPPING.modelKey, name: NANO_BANANA_T2I_MAPPING.name, create: NANO_BANANA_T2I_MAPPING.create, query: NANO_BANANA_T2I_MAPPING.query, statusMapping: NANO_BANANA_T2I_MAPPING.statusMapping },
+    { id: NANO_BANANA_EDIT_MAPPING_ID, taskKind: NANO_BANANA_EDIT_MAPPING.taskKind, modelKey: NANO_BANANA_EDIT_MAPPING.modelKey, name: NANO_BANANA_EDIT_MAPPING.name, create: NANO_BANANA_EDIT_MAPPING.create, query: NANO_BANANA_EDIT_MAPPING.query, statusMapping: NANO_BANANA_EDIT_MAPPING.statusMapping },
   ];
   for (const c of CURATED_MAPPINGS) {
     const i = mappings.findIndex((m) => m.id === c.id);
