@@ -489,8 +489,10 @@ export default function CanvasAssistantPanel({
       >
         <textarea
           className={cn(
-            'w-full min-h-[40px] p-0 border-0 outline-0 resize-none',
-            'bg-transparent text-nomi-ink font-[inherit] text-[13.5px] leading-[1.45]',
+            // 对齐样张 .input：带边框圆角输入盒。
+            'w-full min-h-[56px] px-2.5 py-2 resize-none rounded-[10px]',
+            'border border-nomi-line outline-0 focus:border-nomi-accent',
+            'bg-nomi-paper text-nomi-ink font-[inherit] text-[13.5px] leading-[1.45]',
             'placeholder:text-nomi-ink-40',
           )}
           aria-label="给生成助手发送消息"
@@ -503,12 +505,13 @@ export default function CanvasAssistantPanel({
           })}
           disabled={busy}
         />
-        <div className={cn('flex items-center justify-between gap-3')}>
-          <div className={cn('flex items-center gap-2 min-w-0')}>
+        <div className={cn('flex items-center justify-between gap-1.5')}>
+          <div className={cn('flex items-center gap-1.5 min-w-0')}>
             <NomiSelect
               ariaLabel="AI 模式"
               leadingLabel="模式"
               size="xs"
+              className="h-[26px]"
               value={mode}
               options={[
                 { value: 'agent', label: 'Agent' },
@@ -517,14 +520,14 @@ export default function CanvasAssistantPanel({
               ]}
               onChange={(value) => setMode(value as 'agent' | 'chat' | 'refine')}
             />
-            <AssistantModelPicker />
+            <AssistantModelPicker className="h-[26px]" />
           </div>
           {busy ? (
             <WorkbenchIconButton
               type="button"
               onClick={() => cancelRef.current?.()}
               className={cn(
-                'w-[30px] h-[30px] grid place-items-center',
+                'w-[28px] h-[28px] grid place-items-center',
                 'border-0 rounded-full bg-nomi-ink text-nomi-paper cursor-pointer',
                 'hover:enabled:bg-nomi-accent',
               )}
@@ -536,7 +539,7 @@ export default function CanvasAssistantPanel({
             <WorkbenchIconButton
               type="submit"
               className={cn(
-                'w-[30px] h-[30px] grid place-items-center',
+                'w-[28px] h-[28px] grid place-items-center',
                 'border-0 rounded-full bg-nomi-ink text-nomi-paper cursor-pointer',
                 'hover:enabled:bg-nomi-accent',
                 'disabled:bg-nomi-ink-20 disabled:text-nomi-ink-40 disabled:cursor-not-allowed',

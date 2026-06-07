@@ -5,7 +5,7 @@ import { listWorkbenchModelCatalogModels, type ModelCatalogModelDto } from '../a
 import { getAssistantModelPref, setAssistantModelPref } from './assistantModelPref'
 import { NomiSelect } from '../../design'
 
-export default function AssistantModelPicker(): JSX.Element | null {
+export default function AssistantModelPicker({ className }: { className?: string } = {}): JSX.Element | null {
   const [models, setModels] = React.useState<ModelCatalogModelDto[]>([])
   const [modelKey, setModelKey] = React.useState<string>(() => getAssistantModelPref()?.modelKey || '')
 
@@ -33,6 +33,7 @@ export default function AssistantModelPicker(): JSX.Element | null {
       ariaLabel="助手模型"
       title="助手用哪个模型（选一个能响应的；留空＝自动选第一个可用）"
       size="xs"
+      className={className}
       triggerMaxWidth={160}
       value={modelKey}
       options={[{ value: '', label: '自动选模型' }, ...models.map((m) => ({ value: m.modelKey, label: m.labelZh || m.modelKey }))]}
