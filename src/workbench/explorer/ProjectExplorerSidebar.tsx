@@ -13,15 +13,16 @@ type Props = {
 
 export default function ProjectExplorerSidebar({ categories, projectId = null }: Props): JSX.Element {
   const [tab, setTab] = React.useState<'categories' | 'files'>('files')
-  const [createGroupNonce, setCreateGroupNonce] = React.useState(0)
+  const [createCategoryNonce, setCreateCategoryNonce] = React.useState(0)
   const collapsed = useWorkbenchStore((s) => s.sidebarCollapsed)
   const toggle = useWorkbenchStore((s) => s.toggleSidebarCollapsed)
   const setSidebarCollapsed = useWorkbenchStore((s) => s.setSidebarCollapsed)
 
-  // 加号 = 在当前分类下新建子组。若停在「文件」tab，先切回「分类」让用户看见新建结果。
-  const handleAddSubgroup = React.useCallback(() => {
+  // 加号 = 新建一个顶层分类。若停在「文件」tab，先切回「分类」让用户看见新建结果。
+  // （建子组改走分类行右键「新建子组」。）
+  const handleAddCategory = React.useCallback(() => {
     setTab('categories')
-    setCreateGroupNonce((n) => n + 1)
+    setCreateCategoryNonce((n) => n + 1)
   }, [])
 
   // picker 的「浏览全部 →」→ 展开侧栏 + 切到文件面板(全量浏览在面板,弹层只做快速取,规范 §5)。
@@ -57,7 +58,7 @@ export default function ProjectExplorerSidebar({ categories, projectId = null }:
                 <IconFolder size={14} stroke={1.5} />文件
               </button>
             </div>
-            <button type="button" onClick={handleAddSubgroup} className="grid place-items-center w-7 h-7 rounded-md text-nomi-ink-40 hover:text-nomi-ink hover:bg-nomi-bg" aria-label="新建子组" title="在当前分类下新建子组">
+            <button type="button" onClick={handleAddCategory} className="grid place-items-center w-7 h-7 rounded-md text-nomi-ink-40 hover:text-nomi-ink hover:bg-nomi-bg" aria-label="新建分类" title="新建一个顶层分类">
               <IconPlus size={16} stroke={1.5} />
             </button>
           </div>
@@ -74,7 +75,7 @@ export default function ProjectExplorerSidebar({ categories, projectId = null }:
       ) : tab === 'files' ? (
         <WorkspaceFileExplorerPanel projectId={projectId} />
       ) : (
-        <CategoryTree categories={categories} createGroupNonce={createGroupNonce} />
+        <CategoryTree categories={categories} createCategoryNonce={createCategoryNonce} />
       )}
     </aside>
   )

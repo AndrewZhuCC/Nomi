@@ -17,6 +17,16 @@ import { createDefaultTimeline, normalizeTimeline } from './timeline/timelineMat
 import type { TimelineClip, TimelineState, TimelineTrackType } from './timeline/timelineTypes'
 import { createDefaultWorkbenchDocument, normalizeWorkbenchDocument, type CreationDocumentTools, type PreviewAspectRatio, type WorkbenchDocument } from './workbenchTypes'
 import type { WorkbenchAiMessage } from './ai/workbenchAiTypes'
+import {
+  cloneBuiltinCategories,
+  createCustomCategory,
+  createCustomCategoryId,
+  isBuiltinCategoryId,
+  normalizeCategories,
+  DEFAULT_CATEGORY_ID,
+  type ProjectCategory,
+} from './project/projectCategories'
+import { useGenerationCanvasStore } from './generationCanvasV2/store/generationCanvasStore'
 
 /** 拖动中临时吸附辅助线（非持久化）。 */
 export type TimelineSnapGuide = { frame: number; label: string }
@@ -34,11 +44,21 @@ type WorkbenchState = {
   assistantWidth: number
   /** Phase E: which directory-tree category is currently selected */
   activeCategoryId: string
+  /** 顶层分类列表（内置 5 + 用户自定义）。单一真相源，持久化随项目。 */
+  categories: ProjectCategory[]
   /** Phase E: collapsed (icon-only) vs expanded sidebar */
   sidebarCollapsed: boolean
   /** Phase E: viewport (zoom + offset) per graph-canvas-type category */
   categoryViewports: Record<string, GraphViewport>
   setActiveCategoryId: (id: string) => void
+  /** 读盘恢复整套分类（含自定义）。 */
+  setCategories: (categories: unknown) => void
+  /** 新建一个自定义顶层分类（通用外观），返回新分类供调用方进入行内改名。 */
+  addCategory: (name?: string) => ProjectCategory | null
+  /** 改自定义分类名（内置只读，忽略）。 */
+  renameCategory: (id: string, name: string) => void
+  /** 删自定义分类（内置不可删）：其下节点改派回「分镜」、子组解散，不丢节点。 */
+  deleteCategory: (id: string) => void
   toggleSidebarCollapsed: () => void
   setSidebarCollapsed: (collapsed: boolean) => void
   rememberCategoryViewport: (categoryId: string, viewport: GraphViewport) => void
@@ -93,16 +113,59 @@ export function isWorkspaceMode(value: unknown): value is WorkspaceMode {
   return typeof value === 'string' && WORKSPACE_MODES.includes(value as WorkspaceMode)
 }
 
-export const useWorkbenchStore = create<WorkbenchState>()(subscribeWithSelector((set) => ({
+export const useWorkbenchStore = create<WorkbenchState>()(subscribeWithSelector((set, get) => ({
   persistRevision: 0,
   workspaceMode: 'generation',
   assistantWidth: 340,
   activeCategoryId: 'shots',
+  categories: cloneBuiltinCategories(),
   sidebarCollapsed: true,
   categoryViewports: {},
   setActiveCategoryId: (id) => {
     if (typeof id !== 'string' || !id.trim()) return
     set({ activeCategoryId: id })
+  },
+  setCategories: (categories) => {
+    set({ categories: normalizeCategories(categories) })
+  },
+  addCategory: (name) => {
+    const current = get().categories
+    const id = createCustomCategoryId(current.map((c) => c.id))
+    const order = current.reduce((max, c) => Math.max(max, c.order), 0) + 1
+    const category = createCustomCategory({ id, name: (name || '').trim() || '新分类', order })
+    set((state) => ({
+      categories: [...state.categories, category],
+      persistRevision: state.persistRevision + 1,
+    }))
+    return category
+  },
+  renameCategory: (id, name) => {
+    const trimmed = (name || '').trim()
+    if (!trimmed || isBuiltinCategoryId(id)) return // 空名或内置 → 忽略
+    set((state) => {
+      if (!state.categories.some((c) => c.id === id && !c.isBuiltin)) return state
+      return {
+        categories: state.categories.map((c) => (c.id === id ? { ...c, name: trimmed } : c)),
+        persistRevision: state.persistRevision + 1,
+      }
+    })
+  },
+  deleteCategory: (id) => {
+    if (isBuiltinCategoryId(id)) return // 内置不可删
+    if (!get().categories.some((c) => c.id === id && !c.isBuiltin)) return
+    // 节点回家：其下节点改派回「分镜」，子组解散（保留节点）——用户拍板「节点回家」。
+    const canvas = useGenerationCanvasStore.getState()
+    canvas.nodes
+      .filter((n) => (n.categoryId || DEFAULT_CATEGORY_ID) === id)
+      .forEach((n) => canvas.reassignNodeCategory(n.id, DEFAULT_CATEGORY_ID))
+    canvas.groups
+      .filter((g) => g.categoryId === id)
+      .forEach((g) => canvas.deleteGroup(g.id, false))
+    set((state) => ({
+      categories: state.categories.filter((c) => c.id !== id),
+      activeCategoryId: state.activeCategoryId === id ? DEFAULT_CATEGORY_ID : state.activeCategoryId,
+      persistRevision: state.persistRevision + 1,
+    }))
   },
   toggleSidebarCollapsed: () => {
     set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed }))

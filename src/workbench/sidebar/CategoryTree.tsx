@@ -9,8 +9,8 @@ import NodeItem from './NodeItem'
 
 type Props = {
   categories?: ProjectCategory[]
-  /** 外壳「+」按钮按下的递增信号：每 +1 触发在当前分类下新建子组并进入行内改名。 */
-  createGroupNonce?: number
+  /** 外壳「+」按钮按下的递增信号：每 +1 新建一个顶层分类并进入行内改名。 */
+  createCategoryNonce?: number
 }
 
 type SidebarMenuState =
@@ -30,9 +30,12 @@ const DEFAULT_GROUP_COLOR = '#d8c3a5'
  * 不含 aside/折叠/标题外壳——外壳由承载它的 Tab 面板（ProjectExplorerSidebar）提供。
  * 仅在面板展开 + 「分类」tab 激活时挂载，故始终按展开态渲染。
  */
-export default function CategoryTree({ categories, createGroupNonce = 0 }: Props): JSX.Element {
+export default function CategoryTree({ categories, createCategoryNonce = 0 }: Props): JSX.Element {
   const activeCategoryId = useWorkbenchStore((s) => s.activeCategoryId)
   const setActiveCategoryId = useWorkbenchStore((s) => s.setActiveCategoryId)
+  const addCategory = useWorkbenchStore((s) => s.addCategory)
+  const renameCategory = useWorkbenchStore((s) => s.renameCategory)
+  const deleteCategory = useWorkbenchStore((s) => s.deleteCategory)
   const nodes = useGenerationCanvasStore((s) => s.nodes)
   const groups = useGenerationCanvasStore((s) => s.groups)
   const selectedNodeIds = useGenerationCanvasStore((s) => s.selectedNodeIds)
@@ -52,6 +55,7 @@ export default function CategoryTree({ categories, createGroupNonce = 0 }: Props
   const [expandedCategoryIds, setExpandedCategoryIds] = React.useState<Set<string>>(() => new Set([activeCategoryId]))
   const [menu, setMenu] = React.useState<SidebarMenuState | null>(null)
   const [editingGroupId, setEditingGroupId] = React.useState<string | null>(null)
+  const [editingCategoryId, setEditingCategoryId] = React.useState<string | null>(null)
 
   const visible = React.useMemo(() => {
     const list = (categories && categories.length ? categories : BUILTIN_CATEGORIES)
@@ -210,14 +214,6 @@ export default function CategoryTree({ categories, createGroupNonce = 0 }: Props
     closeMenu()
   }, [closeMenu, createGroup, handleActivateCategory])
 
-  // 外壳「+」按钮：每次 nonce 自增就在当前分类下新建子组（含「文件」tab 切回后的首次挂载）。
-  const lastCreateNonce = React.useRef(0)
-  React.useEffect(() => {
-    if (createGroupNonce === lastCreateNonce.current) return
-    lastCreateNonce.current = createGroupNonce
-    if (createGroupNonce > 0) handleCreateGroup(activeCategoryId)
-  }, [createGroupNonce, activeCategoryId, handleCreateGroup])
-
   const handleCommitGroupName = React.useCallback((groupId: string, name: string) => {
     const trimmed = name.trim()
     if (trimmed) renameGroup(groupId, trimmed)
@@ -225,6 +221,43 @@ export default function CategoryTree({ categories, createGroupNonce = 0 }: Props
   }, [renameGroup])
 
   const handleCancelGroupEdit = React.useCallback(() => setEditingGroupId(null), [])
+
+  // 外壳「+」按钮：每次 nonce 自增就新建一个顶层分类并进入行内改名
+  // （含从「文件」tab 切回后 CategoryTree 首次挂载的情形）。
+  const handleCreateCategory = React.useCallback(() => {
+    const created = addCategory()
+    if (!created) return
+    setActiveCategoryId(created.id)
+    setExpandedCategoryIds((current) => new Set(current).add(created.id))
+    setEditingCategoryId(created.id)
+  }, [addCategory, setActiveCategoryId])
+
+  const lastCreateNonce = React.useRef(0)
+  React.useEffect(() => {
+    if (createCategoryNonce === lastCreateNonce.current) return
+    lastCreateNonce.current = createCategoryNonce
+    if (createCategoryNonce > 0) handleCreateCategory()
+  }, [createCategoryNonce, handleCreateCategory])
+
+  const handleCommitCategoryName = React.useCallback((categoryId: string, name: string) => {
+    const trimmed = name.trim()
+    if (trimmed) renameCategory(categoryId, trimmed)
+    setEditingCategoryId(null)
+  }, [renameCategory])
+
+  const handleCancelCategoryEdit = React.useCallback(() => setEditingCategoryId(null), [])
+
+  const handleRenameCategory = React.useCallback((categoryId: string) => {
+    setEditingCategoryId(categoryId)
+    closeMenu()
+  }, [closeMenu])
+
+  const handleDeleteCategory = React.useCallback((categoryId: string) => {
+    const category = (categories || BUILTIN_CATEGORIES).find((c) => c.id === categoryId)
+    const label = category?.name || categoryId
+    if (window.confirm(`删除分类「${label}」？里面的节点会移回「分镜」，不会丢失。`)) deleteCategory(categoryId)
+    closeMenu()
+  }, [categories, closeMenu, deleteCategory])
 
   const handleCopyNode = React.useCallback((nodeId: string) => {
     const node = nodeById.get(nodeId)
@@ -290,11 +323,22 @@ export default function CategoryTree({ categories, createGroupNonce = 0 }: Props
         onClick={(event) => event.stopPropagation()}
         onContextMenu={(event) => event.preventDefault()}
       >
-        {menu.type === 'category' ? (
-          <button type="button" role="menuitem" className={buttonClass} onClick={() => handleCreateGroup(menu.categoryId)}>
-            新建子组
-          </button>
-        ) : null}
+        {menu.type === 'category' ? (() => {
+          const category = (categories || BUILTIN_CATEGORIES).find((c) => c.id === menu.categoryId)
+          const isCustom = category ? !category.isBuiltin : false
+          return (
+            <>
+              <button type="button" role="menuitem" className={buttonClass} onClick={() => handleCreateGroup(menu.categoryId)}>新建子组</button>
+              {isCustom ? (
+                <>
+                  <button type="button" role="menuitem" className={buttonClass} onClick={() => handleRenameCategory(menu.categoryId)}>重命名</button>
+                  <div className="my-0.5 h-px bg-nomi-line" />
+                  <button type="button" role="menuitem" className={dangerClass} onClick={() => handleDeleteCategory(menu.categoryId)}>删除分类</button>
+                </>
+              ) : null}
+            </>
+          )
+        })() : null}
         {menu.type === 'node' ? (
           <>
             <button type="button" role="menuitem" className={buttonClass} onClick={() => handleCopyNode(menu.nodeId)}>复制</button>
@@ -334,6 +378,9 @@ export default function CategoryTree({ categories, createGroupNonce = 0 }: Props
                 active={activeCategoryId === cat.id}
                 collapsed={false}
                 expanded={expanded}
+                editing={editingCategoryId === cat.id}
+                onCommitName={(name) => handleCommitCategoryName(cat.id, name)}
+                onCancelEdit={handleCancelCategoryEdit}
                 onActivate={() => handleCategoryRowClick(cat.id)}
                 onDropNode={(nodeId) => handleDropNodeOnCategory(nodeId, cat.id)}
                 onContextMenu={(event) => openMenu(event, { type: 'category', categoryId: cat.id })}

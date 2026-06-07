@@ -116,6 +116,7 @@ export default function WorkbenchShell({
     const setWorkspaceMode = useWorkbenchStore(
         (state) => state.setWorkspaceMode,
     );
+    const categories = useWorkbenchStore((state) => state.categories);
     const [mountedWorkspaceModes, setMountedWorkspaceModes] = React.useState<
         WorkspaceMode[]
     >(() => [workspaceMode]);
@@ -177,7 +178,7 @@ export default function WorkbenchShell({
                 )}>
                 {/* 文件树只在生成区显示：创作是纯文稿、预览/剪辑是回看时间轴，都不需要左侧资源树。 */}
                 {workspaceMode === "generation" ? (
-                    <ProjectExplorerSidebar projectId={projectId ?? null} />
+                    <ProjectExplorerSidebar projectId={projectId ?? null} categories={categories} />
                 ) : null}
                 <div className='flex-1 min-w-0 min-h-0 relative'>
                     {mountedWorkspaceModes.includes("creation") ? (
