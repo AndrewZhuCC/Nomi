@@ -248,10 +248,11 @@ export default function CreationAiPanel(): JSX.Element {
     }
   }, [activeMode, documentText, draft, launchStoryboardPlanning, selectedText, sending, setDraft, setError, setMessages])
 
+  // 通用创作动作，贴 Nomi 视频创作调性、不绑小说题材（旧的「悬疑开场/童话语气」在产品/宣传项目里调性错配）。
   const suggestions = React.useMemo(() => [
-    '一段悬疑开场',
-    '续写下一段',
-    '改成更童话的语气',
+    '给我一个开头',
+    '把这段写得更有画面感',
+    '梳理成分镜脚本',
   ], [])
 
   const handleNewConversation = React.useCallback(() => {

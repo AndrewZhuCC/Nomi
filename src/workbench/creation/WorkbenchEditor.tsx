@@ -12,7 +12,7 @@ import { useNomiRichTextEditor } from '../common/useNomiRichTextEditor'
 import { buildRichTextActions } from '../common/richTextActions'
 
 const CREATION_PLACEHOLDER =
-  '从这里开始写你的故事或剧本...\n\n💡 选中文字后，点右侧「生成图片」或「生成视频」，画布会自动创建对应节点。'
+  '从这里开始写你的故事、脚本或文案……  选中文字，点右侧即可生成图片 / 视频节点。'
 
 function WorkbenchEditorToolbar({ editor }: { editor: Editor | null }): JSX.Element {
   const actions = buildRichTextActions(editor)
@@ -136,7 +136,14 @@ export default function WorkbenchEditor(): JSX.Element {
       <SelectionGeneratePopover editor={editor} selectedText={selectedText} onCreated={() => setSelectedText('')} />
       <div
         ref={scrollRef}
-        className={cn('workbench-editor__scroll', 'min-w-0 min-h-0 overflow-auto')}
+        className={cn(
+          'workbench-editor__scroll', 'min-w-0 min-h-0 overflow-auto',
+          // Tiptap Placeholder 渲染：空文档第一段显示 data-placeholder（仿 PromptEditor，
+          // 补上创作编辑器缺失的 ::before 规则——根因，不是只在这一处贴症状）。
+          '[&_.is-editor-empty]:before:content-[attr(data-placeholder)]',
+          '[&_.is-editor-empty]:before:text-nomi-ink-40 [&_.is-editor-empty]:before:float-left',
+          '[&_.is-editor-empty]:before:pointer-events-none [&_.is-editor-empty]:before:h-0',
+        )}
       >
         <EditorContent editor={editor} />
       </div>
