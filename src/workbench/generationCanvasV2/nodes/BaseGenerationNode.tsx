@@ -16,6 +16,7 @@ import PropCardNode from "./render/PropCardNode";
 import AudioStripNode from "./render/AudioStripNode";
 import ImageCropOverlay from "./render/ImageCropOverlay";
 import NodeImageEditToolbar from "./NodeImageEditToolbar";
+import NodeResultDownloadButton from "./NodeResultDownloadButton";
 import { useNodeImageEditing } from "./useNodeImageEditing";
 import { cn } from "../../../utils/cn";
 import type { GenerationCanvasNode } from "../model/generationCanvasTypes";
@@ -686,11 +687,7 @@ function BaseGenerationNodeImpl({
             event.preventDefault();
             event.stopPropagation();
             if (!node.derivedFrom || typeof window === "undefined") return;
-            window.dispatchEvent(
-                new CustomEvent(FOCUS_GENERATION_NODE_EVENT, {
-                    detail: { nodeId: node.derivedFrom },
-                }),
-            );
+            window.dispatchEvent(new CustomEvent(FOCUS_GENERATION_NODE_EVENT, { detail: { nodeId: node.derivedFrom } }));
         },
         [node.derivedFrom],
     );
@@ -1106,6 +1103,7 @@ function BaseGenerationNodeImpl({
                         <IconInfoCircle size={14} stroke={1.6} />
                     </button>
                 ) : null}
+                <NodeResultDownloadButton node={node} />
             </header>
 
             <ProvenancePanel

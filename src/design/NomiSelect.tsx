@@ -75,6 +75,10 @@ export function NomiSelect({
     <Combobox
       store={combobox}
       withinPortal
+      // 宽度内容驱动：默认 Mantine 把下拉宽锁成触发 pill 的宽（如「比例」pill 仅 ~67px），
+      // 选项标签（auto/1:1/16:9…）被 truncate 成空 → 看着「点开是空白」。改 max-content 后
+      // 下拉跟着最长选项自然撑开；超长模型名由 maxWidth + 选项内 truncate 兜底，不会撑成怪物。
+      width="max-content"
       position="bottom-start"
       offset={6}
       middlewares={{ flip: true, shift: true }}
@@ -85,6 +89,7 @@ export function NomiSelect({
       styles={{
         dropdown: {
           padding: 4,
+          maxWidth: 280,
           border: '1px solid var(--nomi-line)',
           borderRadius: 12,
           background: 'var(--nomi-paper)',

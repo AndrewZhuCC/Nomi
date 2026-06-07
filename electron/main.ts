@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, net, protocol, session, shell, web
 import type { WebContents } from "electron";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { downloadAssetToDisk } from "./assets/downloadAsset";
 import {
   createProject,
   deleteProject,
@@ -263,6 +264,7 @@ function registerIpc(): void {
   ipcMain.handle("nomi:assets:import-remote-url", (_event, payload) => importRemoteAsset(payload));
   ipcMain.handle("nomi:assets:import-file", (_event, payload) => importLocalFile(payload));
   ipcMain.handle("nomi:assets:list", (_event, payload) => listProjectAssets(payload));
+  ipcMain.handle("nomi:assets:download", (_event, payload) => downloadAssetToDisk(payload));
   ipcMain.handle("nomi:exports:start-job", (event, payload) => {
     registerExportJobEventForwarding(event.sender);
     return startExportJob(payload);

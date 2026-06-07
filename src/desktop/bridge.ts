@@ -78,6 +78,10 @@ export type DesktopBridge = {
       bytes: ArrayBuffer
       kind?: string
     }) => Promise<DesktopAssetDto>
+    download: (payload: {
+      url: string
+      suggestedName?: string
+    }) => Promise<{ ok: boolean; canceled?: boolean; path?: string }>
   }
   exports: {
     startJob: (payload: DesktopExportJobStartPayload) => Promise<DesktopExportJobStartResult>

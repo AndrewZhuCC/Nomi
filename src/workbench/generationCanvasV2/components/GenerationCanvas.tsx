@@ -25,6 +25,7 @@ import {
   getSelectedBounds,
   getWheelZoomFactor,
 } from './generationCanvasGeometry'
+import { findScrollableAncestor } from './canvasScroll'
 import '../styles/generationCanvas.css'
 
 const GENERATION_PROVIDER = 'chatfire'
@@ -683,15 +684,14 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
   }, [])
 
   const handleWheel = React.useCallback((event: WheelEvent) => {
+    // 滚轮命中卡内可滚区（提示词编辑器等）时交给原生滚动，别被 stage 的缩放监听吞掉（一处覆盖所有入口，P2）。
+    if (event.target instanceof Element && findScrollableAncestor(event.target, stageRef.current, event.deltaY)) return
     event.preventDefault()
     setContextNodeMenu(null)
     if (!stageRef.current) return
     const rect = stageRef.current.getBoundingClientRect()
-    const mouseX = event.clientX - rect.left
-    const mouseY = event.clientY - rect.top
-    const currentZoom = zoomRef.current
-    const nextZoom = clampNumber(currentZoom * getWheelZoomFactor(event), 0.2, 3)
-    zoomAtStagePoint(nextZoom, { x: mouseX, y: mouseY })
+    const nextZoom = clampNumber(zoomRef.current * getWheelZoomFactor(event), 0.2, 3)
+    zoomAtStagePoint(nextZoom, { x: event.clientX - rect.left, y: event.clientY - rect.top })
   }, [zoomAtStagePoint])
 
   React.useEffect(() => {

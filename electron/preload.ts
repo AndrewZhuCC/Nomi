@@ -30,6 +30,12 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
     list: (payload: unknown) => ipcRenderer.invoke("nomi:assets:list", payload),
     importRemoteUrl: (payload: unknown) => ipcRenderer.invoke("nomi:assets:import-remote-url", payload),
     importFile: (payload: unknown) => ipcRenderer.invoke("nomi:assets:import-file", payload),
+    download: (payload: unknown) =>
+      ipcRenderer.invoke("nomi:assets:download", payload) as Promise<{
+        ok: boolean;
+        canceled?: boolean;
+        path?: string;
+      }>,
   },
   exports: {
     startJob: (payload: unknown) => ipcRenderer.invoke("nomi:exports:start-job", payload),
