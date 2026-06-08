@@ -16,7 +16,7 @@ import type { GenerationCanvasNode } from '../../model/generationCanvasTypes'
 import { readCharacterMeta } from '../../model/nodeMetaFields'
 import { useNodeUsageCount, useNodeVariantCount } from '../../hooks/useNodeRelationships'
 import { STRIPED_BG_CLASS, UsageDot, VariantChip, UploadFallback } from './CardCommon'
-import { useGenerationCanvasStore } from '../../store/generationCanvasStore'
+import { useNodeImageUpload } from '../../adapters/useNodeImageUpload'
 import { EditableNodeTitle } from './EditableNodeTitle'
 
 type Props = {
@@ -27,14 +27,8 @@ function CharacterCardNodeImpl({ node }: Props): JSX.Element {
   const meta = readCharacterMeta(node)
   const usageCount = useNodeUsageCount(node.id, node.title)
   const variantCount = useNodeVariantCount(node.id)
-  const updateNode = useGenerationCanvasStore((state) => state.updateNode)
+  const handleUpload = useNodeImageUpload(node.id, 'character-card-upload')
   const hasImage = Boolean(node.result?.url)
-
-  const handleUpload = React.useCallback((dataUrl: string) => {
-    updateNode(node.id, {
-      result: { id: `upload-${Date.now()}`, type: 'image', url: dataUrl, createdAt: Date.now() },
-    })
-  }, [node.id, updateNode])
 
   // 当三种内容都为空时，信息区整段不渲染——节点只剩图（或占位）。
   const hasTagline = Boolean(meta.tagline)

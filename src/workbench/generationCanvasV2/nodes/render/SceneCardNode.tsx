@@ -12,7 +12,7 @@ import type { GenerationCanvasNode } from '../../model/generationCanvasTypes'
 import { readSceneMeta } from '../../model/nodeMetaFields'
 import { useNodeUsageCount, useNodeVariantCount } from '../../hooks/useNodeRelationships'
 import { STRIPED_BG_CLASS, UsageDot, VariantChip, UploadFallback } from './CardCommon'
-import { useGenerationCanvasStore } from '../../store/generationCanvasStore'
+import { useNodeImageUpload } from '../../adapters/useNodeImageUpload'
 import { EditableNodeTitle } from './EditableNodeTitle'
 
 type Props = {
@@ -23,14 +23,8 @@ function SceneCardNodeImpl({ node }: Props): JSX.Element {
   const meta = readSceneMeta(node)
   const usageCount = useNodeUsageCount(node.id, node.title)
   const variantCount = useNodeVariantCount(node.id)
-  const updateNode = useGenerationCanvasStore((state) => state.updateNode)
   const hasImage = Boolean(node.result?.url)
-
-  const handleUpload = React.useCallback((dataUrl: string) => {
-    updateNode(node.id, {
-      result: { id: `upload-${Date.now()}`, type: 'image', url: dataUrl, createdAt: Date.now() },
-    })
-  }, [node.id, updateNode])
+  const handleUpload = useNodeImageUpload(node.id, 'scene-card-upload')
 
   const hasMood = Boolean(meta.mood && meta.mood.length > 0)
   const hasTitle = Boolean(node.title && node.title.trim().length > 0)

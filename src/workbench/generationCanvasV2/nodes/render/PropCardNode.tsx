@@ -12,7 +12,7 @@ import type { GenerationCanvasNode } from '../../model/generationCanvasTypes'
 import { readPropMeta } from '../../model/nodeMetaFields'
 import { useNodeUsageCount } from '../../hooks/useNodeRelationships'
 import { STRIPED_BG_CLASS, UsageDot, UploadFallback } from './CardCommon'
-import { useGenerationCanvasStore } from '../../store/generationCanvasStore'
+import { useNodeImageUpload } from '../../adapters/useNodeImageUpload'
 import { EditableNodeTitle } from './EditableNodeTitle'
 
 type Props = {
@@ -22,14 +22,8 @@ type Props = {
 function PropCardNodeImpl({ node }: Props): JSX.Element {
   const meta = readPropMeta(node)
   const usageCount = useNodeUsageCount(node.id, node.title)
-  const updateNode = useGenerationCanvasStore((state) => state.updateNode)
   const hasImage = Boolean(node.result?.url)
-
-  const handleUpload = React.useCallback((dataUrl: string) => {
-    updateNode(node.id, {
-      result: { id: `upload-${Date.now()}`, type: 'image', url: dataUrl, createdAt: Date.now() },
-    })
-  }, [node.id, updateNode])
+  const handleUpload = useNodeImageUpload(node.id, 'prop-card-upload')
 
   const hasOwner = Boolean(meta.ownedBy)
   const hasUsage = usageCount > 0

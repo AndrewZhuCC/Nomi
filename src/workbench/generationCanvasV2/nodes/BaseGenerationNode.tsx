@@ -20,6 +20,7 @@ import NodeResultDownloadButton from "./NodeResultDownloadButton";
 import { useNodeImageEditing } from "./useNodeImageEditing";
 import { cn } from "../../../utils/cn";
 import { NomiImage } from "../../../design/media";
+import { persistNodeImageFile } from "../adapters/persistNodeImage";
 import type { GenerationCanvasNode } from "../model/generationCanvasTypes";
 import { useWorkbenchStore } from "../../workbenchStore";
 import { useGenerationCanvasStore } from "../store/generationCanvasStore";
@@ -698,20 +699,23 @@ function BaseGenerationNodeImpl({
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = "";
             if (!file) return;
+            const createdAt = Date.now();
+            // 即时 base64 预览（短命），随后落盘换 nomi-local 替换掉，避免全景大图 base64 永久驻留。
             const reader = new FileReader();
             reader.onload = (loadEvent) => {
                 const dataUrl = loadEvent.target?.result;
                 if (typeof dataUrl !== "string") return;
                 updateNode(node.id, {
-                    result: {
-                        id: `panorama-${Date.now()}`,
-                        type: "image",
-                        url: dataUrl,
-                        createdAt: Date.now(),
-                    },
+                    result: { id: `panorama-${createdAt}`, type: "image", url: dataUrl, createdAt },
                 });
             };
             reader.readAsDataURL(file);
+            void persistNodeImageFile(file, node.id).then((localUrl) => {
+                if (!localUrl) return;
+                updateNode(node.id, {
+                    result: { id: `panorama-asset-${createdAt}`, type: "image", url: localUrl, createdAt },
+                });
+            });
         },
         [node.id, updateNode],
     );
