@@ -1,5 +1,5 @@
 import React from 'react'
-import { IconCornerDownLeft, IconCursorText, IconFilePlus, IconMovie, IconPlayerStopFilled, IconReplace, IconSend2, IconSparkles, IconX } from '@tabler/icons-react'
+import { IconCornerDownLeft, IconCursorText, IconFilePlus, IconMovie, IconPaperclip, IconPlayerStopFilled, IconReplace, IconSend2, IconSparkles, IconX } from '@tabler/icons-react'
 import { NomiLoadingMark, NomiLogoMark, NomiSelect, WorkbenchButton, WorkbenchIconButton } from '../../design'
 import { NomiMarkdown } from '../common/NomiMarkdown'
 import { cn } from '../../utils/cn'
@@ -21,6 +21,9 @@ import {
   type CreationAiModeId,
 } from './creationAiModes'
 import { useTransientScrollingClass } from './useTransientScrollingClass'
+import { AttachmentRail } from '../ai/composer/AttachmentRail'
+import { AutoGrowTextarea } from '../ai/composer/AutoGrowTextarea'
+import { COMPOSER_ATTACHMENT_ACCEPT, useComposerAttachments } from '../ai/composer/useComposerAttachments'
 
 const STORYBOARD_REQUEST_PATTERN = /拆镜头|分镜|拆分/
 
@@ -80,13 +83,26 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
   const modeId = useWorkbenchStore((state) => state.creationAiModeId)
   const draft = useWorkbenchStore((state) => state.creationAiDraft)
   const messages = useWorkbenchStore((state) => state.creationAiMessages)
+  const attachments = useWorkbenchStore((state) => state.creationAiAttachments)
   const error = useWorkbenchStore((state) => state.creationAiError)
   const setModeId = useWorkbenchStore((state) => state.setCreationAiModeId)
   const setDraft = useWorkbenchStore((state) => state.setCreationAiDraft)
   const setMessages = useWorkbenchStore((state) => state.setCreationAiMessages)
+  const setAttachments = useWorkbenchStore((state) => state.setCreationAiAttachments)
   const setError = useWorkbenchStore((state) => state.setCreationAiError)
   const setWorkspaceMode = useWorkbenchStore((state) => state.setWorkspaceMode)
   const resetConversation = useWorkbenchStore((state) => state.resetCreationAiConversation)
+
+  const {
+    isDragging,
+    openFilePicker,
+    inputRef,
+    onInputChange,
+    removeAttachment,
+    clearAttachments,
+    handlePaste,
+    dragHandlers,
+  } = useComposerAttachments({ attachments, setAttachments, onError: setError })
 
   // Keep a live ref so the tool-call handler always sees the freshest editor
   // tools without re-creating `send` on every editor remount.
@@ -257,21 +273,37 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
 
   const handleNewConversation = React.useCallback(() => {
     setPendingToolCalls([])
+    clearAttachments()
     resetConversation()
     // Wipe the shared backend memory so both areas start a fresh thread.
     void clearWorkbenchAgentSession(workbenchSessionKey())
-  }, [resetConversation])
+  }, [clearAttachments, resetConversation])
 
   return (
     <aside
       className={cn(
         'workbench-creation-ai',
-        'grid grid-rows-[44px_auto_minmax(0,1fr)_auto_auto]',
+        'relative grid grid-rows-[44px_auto_minmax(0,1fr)_auto_auto]',
         '[grid-template-areas:"header"_"tools"_"messages"_"error"_"composer"]',
         'min-w-0 min-h-0 overflow-hidden',
       )}
       aria-label="AI 创作区"
+      {...dragHandlers}
     >
+      {isDragging ? (
+        <div
+          className={cn(
+            'absolute inset-1.5 z-10 flex flex-col items-center justify-center gap-2 pointer-events-none',
+            'rounded-nomi border-2 border-dashed border-nomi-accent bg-nomi-accent-soft',
+            'text-bodySm font-semibold text-nomi-accent',
+          )}
+          aria-hidden="true"
+        >
+          <IconPaperclip size={26} stroke={1.5} />
+          <div>拖到这里添加附件</div>
+          <div className={cn('text-micro font-normal text-nomi-ink-60')}>图片 / PDF / Word / Excel / txt · 单个上限 30MB</div>
+        </div>
+      ) : null}
       <header
         className={cn(
           'workbench-creation-ai__header',
@@ -432,20 +464,39 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
       ) : null}
 
       <footer className={cn('workbench-creation-ai__composer', '[grid-area:composer]')}>
-        <textarea
-          className={cn(
-            'workbench-creation-ai__input',
-            'w-full min-h-14 resize-none',
-            'border-0 rounded-none bg-transparent',
-            'font-inherit outline-none',
-            'focus:shadow-none',
-          )}
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          accept={COMPOSER_ATTACHMENT_ACCEPT}
+          className="hidden"
+          aria-hidden="true"
+          tabIndex={-1}
+          onChange={onInputChange}
+        />
+        <AttachmentRail attachments={attachments} onRemove={removeAttachment} className={cn('mb-2')} />
+        <AutoGrowTextarea
+          className={cn('workbench-creation-ai__input', 'min-h-14')}
           value={draft}
-          placeholder="问点什么..."
+          placeholder="问点什么…"
+          aria-label="创作 AI 输入"
           onChange={(event) => setDraft(event.currentTarget.value)}
           onKeyDown={(event) => handleAiComposerKeyDown(event, () => void send())}
+          onPaste={handlePaste}
         />
         <div className={cn('workbench-creation-ai__actions', 'flex items-center justify-between gap-2')}>
+          <WorkbenchIconButton
+            className={cn(
+              'workbench-creation-ai__attach',
+              'shrink-0 size-7 inline-flex items-center justify-center cursor-pointer',
+              'text-nomi-ink-60 hover:text-nomi-ink',
+              'focus-visible:outline-2 focus-visible:outline-workbench-focus focus-visible:outline-offset-2',
+            )}
+            label="添加附件"
+            aria-label="添加附件（也可拖拽 / 粘贴）"
+            onClick={openFilePicker}
+            icon={<IconPaperclip size={16} />}
+          />
           <NomiSelect
             ariaLabel="创作模式"
             leadingLabel="模式"

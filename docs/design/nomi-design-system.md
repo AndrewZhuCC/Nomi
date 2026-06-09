@@ -333,6 +333,29 @@ showUndoToast({
 
 ---
 
+### 4.6 `AttachmentRail` / `AttachmentChip`（composer 附件）
+
+文件：`src/workbench/ai/composer/AttachmentRail.tsx`（+ `composerAttachmentTypes.ts` / `useComposerAttachments.ts` / `AutoGrowTextarea.tsx`）
+
+视觉：助手 composer 输入框上方的一行附件 chip——图片是 48×48 缩略图 tile，文档是横向 chip。
+
+规格：
+
+| 属性 | 值 |
+|---|---|
+| 图片 chip | `size-12`（48）`rounded-nomi-sm` `border-nomi-line` `overflow-hidden`；上传中盖 `NomiLoadingMark`；× 在角上 |
+| 文件 chip | `h-12 max-w-[184px]` `rounded-nomi-sm` `border-nomi-line` `bg-nomi-ink-05`；左 `size-7` 中性 tile（`bg-nomi-ink-10` + `text-nomi-ink-60` 字形）+ 名(`text-bodySm`)/类型·大小(`text-micro text-nomi-ink-60`) + × |
+| 文件类型色 | **中性**（不用语义 danger/accent），类型由「PDF · …」副标签承载（density-first，避免与错误态/发送按钮撞色）|
+| 字形 | xls/csv→`IconTable`、pdf/doc/txt/md→`IconFileText`、其它→`IconFile`，size 16 stroke 1.5 |
+| × 命中区 | `size-6`（24，a11y）；图片角标内圈 `size-4` 深圆 + `IconX` 10 |
+| 错误态 | `border-workbench-danger` + 副标「上传失败」|
+| 行为 | 三入口（点击 `openFilePicker` / 拖拽蒙层 / 粘贴图片）经 `useComposerAttachments`；上传走 `importWorkbenchLocalAssetFile`→`nomi-local://`；30MB 上限 |
+
+何时用：助手类 composer（创作助手 / 画布助手）需要附文件时。
+何时不用：生成节点的参考图槽 → 用画布既有的 asset-slot（`NodeParameterControls`），不复用本组件。
+
+---
+
 ## 5. 视觉 Patterns（recur 模式）
 
 ### 5.1 节点卡片（NodeCard）
@@ -592,7 +615,7 @@ import IconX from '@/assets/some-svg.svg'
 
 ## 13. 维护
 
-- 本文档版本 v1，对应代码 v0.6.1
+- 本文档版本 v1.1（+§4.6 AttachmentRail），对应代码 v0.9.x
 - 每次新增 §4 / §5 entry 时 bump 一次小版本（v1.1、v1.2 ...）
 - 重大重构（如颜色系统重设）bump 主版本（v2）
 - 文档过时时优先更新本文档，不依赖代码注释作为 source of truth

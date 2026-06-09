@@ -17,6 +17,7 @@ import { createDefaultTimeline, normalizeTimeline } from './timeline/timelineMat
 import type { TimelineClip, TimelineState, TimelineTrackType } from './timeline/timelineTypes'
 import { createDefaultWorkbenchDocument, normalizeWorkbenchDocument, type CreationDocumentTools, type PreviewAspectRatio, type WorkbenchDocument } from './workbenchTypes'
 import type { WorkbenchAiMessage } from './ai/workbenchAiTypes'
+import type { ComposerAttachment } from './ai/composer/composerAttachmentTypes'
 import {
   cloneBuiltinCategories,
   createCustomCategory,
@@ -68,6 +69,7 @@ type WorkbenchState = {
   creationAiModeId: string
   creationAiDraft: string
   creationAiMessages: WorkbenchAiMessage[]
+  creationAiAttachments: ComposerAttachment[]
   creationAiError: string
   timeline: TimelineState
   timelinePlaying: boolean
@@ -84,6 +86,7 @@ type WorkbenchState = {
   setCreationAiModeId: (modeId: string) => void
   setCreationAiDraft: (draft: string) => void
   setCreationAiMessages: (messages: WorkbenchAiMessage[] | ((messages: WorkbenchAiMessage[]) => WorkbenchAiMessage[])) => void
+  setCreationAiAttachments: (attachments: ComposerAttachment[] | ((attachments: ComposerAttachment[]) => ComposerAttachment[])) => void
   setCreationAiError: (error: string) => void
   resetCreationAiConversation: () => void
   setTimeline: (timeline: TimelineState) => void
@@ -188,6 +191,7 @@ export const useWorkbenchStore = create<WorkbenchState>()(subscribeWithSelector(
   creationAiModeId: 'general',
   creationAiDraft: '',
   creationAiMessages: [],
+  creationAiAttachments: [],
   creationAiError: '',
   timeline: createDefaultTimeline(),
   timelinePlaying: false,
@@ -222,11 +226,16 @@ export const useWorkbenchStore = create<WorkbenchState>()(subscribeWithSelector(
       creationAiMessages: typeof messages === 'function' ? messages(state.creationAiMessages) : messages,
     }))
   },
+  setCreationAiAttachments: (attachments) => {
+    set((state) => ({
+      creationAiAttachments: typeof attachments === 'function' ? attachments(state.creationAiAttachments) : attachments,
+    }))
+  },
   setCreationAiError: (creationAiError) => {
     set({ creationAiError })
   },
   resetCreationAiConversation: () => {
-    set({ creationAiDraft: '', creationAiMessages: [], creationAiError: '' })
+    set({ creationAiDraft: '', creationAiMessages: [], creationAiAttachments: [], creationAiError: '' })
   },
   setTimeline: (timeline) => {
     set((state) => ({
