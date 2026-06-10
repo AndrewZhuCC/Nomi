@@ -4,6 +4,21 @@ import { generationCanvasTools, type CreateGenerationNodeToolInput } from './gen
 import { listAvailableModelsForAgent, type AgentModelEntry } from './availableModels'
 import { buildPlannedNodeMeta } from './plannedNodeMeta'
 
+// 批量创建节点的布局由渲染层 derive，而不是信任 LLM 发来的像素坐标（prompt 里硬编码
+// 单行坐标会让 6+ 节点横向溢出视口、适应视图后节点变得极小）。按节点数算近似正方网格，
+// 列数 = ceil(sqrt(n))，行列定距铺开，保证任意数量都紧凑不溢出。
+const GRID_ORIGIN_X = 160
+const GRID_ORIGIN_Y = 160
+const GRID_STEP_X = 360
+const GRID_STEP_Y = 260
+export function gridPosition(index: number, total: number): { x: number; y: number } {
+  const cols = Math.max(1, Math.ceil(Math.sqrt(Math.max(1, total))))
+  return {
+    x: GRID_ORIGIN_X + (index % cols) * GRID_STEP_X,
+    y: GRID_ORIGIN_Y + Math.floor(index / cols) * GRID_STEP_Y,
+  }
+}
+
 /**
  * Single source of truth for turning an agent canvas tool call into a real
  * mutation against the renderer `generationCanvasTools` store. Returns the
@@ -31,12 +46,22 @@ export async function applyCanvasToolCall(toolName: string, args: unknown): Prom
     const entryByKey = new Map<string, AgentModelEntry>(
       needsModels ? (await listAvailableModelsForAgent()).map((entry) => [entry.modelKey, entry]) : [],
     )
+    const total = incoming.length
     const inputs: CreateGenerationNodeToolInput[] = incoming.map((raw, index) => {
       const node = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
       const kind = (typeof node.kind === 'string' ? node.kind : 'image') as GenerationNodeKind
       const positionRecord =
         node.position && typeof node.position === 'object' ? (node.position as Record<string, unknown>) : null
       const meta = buildPlannedNodeMeta(node, entryByKey)
+      // 多节点批量：渲染层网格排布（忽略 LLM 像素坐标，避免单行溢出）。
+      // 单节点：尊重 agent 指定位置（增量添加可能要贴近某节点），否则落网格首格。
+      const position =
+        total > 1
+          ? gridPosition(index, total)
+          : {
+              x: typeof positionRecord?.x === 'number' ? positionRecord.x : gridPosition(index, total).x,
+              y: typeof positionRecord?.y === 'number' ? positionRecord.y : gridPosition(index, total).y,
+            }
       return {
         kind,
         title:
@@ -44,10 +69,7 @@ export async function applyCanvasToolCall(toolName: string, args: unknown): Prom
             ? node.title.trim()
             : `${getGenerationNodeDefaultTitle(kind)} ${index + 1}`,
         prompt: typeof node.prompt === 'string' ? node.prompt : '',
-        position: {
-          x: typeof positionRecord?.x === 'number' ? positionRecord.x : 160 + index * 340,
-          y: typeof positionRecord?.y === 'number' ? positionRecord.y : 260 + (index % 2) * 220,
-        },
+        position,
         ...(meta ? { meta } : {}),
       }
     })
