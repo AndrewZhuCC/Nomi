@@ -30,6 +30,7 @@ import { WorkbenchAiHeaderActions } from '../../ai/WorkbenchAiHeaderActions'
 import AssistantModelPicker from '../../ai/AssistantModelPicker'
 import { AssistantToolsFold } from '../../ai/AssistantToolsFold'
 import { StaleConversationDivider, useStaleConversationBoundary } from '../../ai/staleConversationDivider'
+import { narrateTurnStats } from '../../observability/narrate'
 import { AttachmentRail } from '../../ai/composer/AttachmentRail'
 import { AutoGrowTextarea } from '../../ai/composer/AutoGrowTextarea'
 import { COMPOSER_ATTACHMENT_ACCEPT, useComposerAttachments } from '../../ai/composer/useComposerAttachments'
@@ -276,6 +277,13 @@ export default function CanvasAssistantPanel({
         } else {
           updateMessage(assistantMessageId, finalText || '已完成。')
         }
+        // S3 轮次 footer:把本轮 token 用量挂到收尾消息上(渲染见消息体底部 caption)。
+        const totalTokens = result.response.usage?.totalTokens
+        if (totalTokens) {
+          setMessages((prev) => prev.map((message) => (
+            message.id === assistantMessageId ? { ...message, turnStats: { totalTokens } } : message
+          )))
+        }
       } catch (error: unknown) {
         updateMessage(
           assistantMessageId,
@@ -487,6 +495,9 @@ export default function CanvasAssistantPanel({
                     className="generation-canvas-v2-assistant__reply-action"
                     content={message.content}
                   />
+                ) : null}
+                {message.turnStats?.totalTokens ? (
+                  <span className={cn('block mt-1 text-micro text-nomi-ink-40')}>{narrateTurnStats(message.turnStats.totalTokens)}</span>
                 ) : null}
               </div>
               {message.id === staleBoundaryId ? <StaleConversationDivider /> : null}

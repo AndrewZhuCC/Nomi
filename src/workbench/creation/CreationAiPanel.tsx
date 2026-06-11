@@ -24,6 +24,7 @@ import {
 import { useTransientScrollingClass } from './useTransientScrollingClass'
 import { AttachmentRail } from '../ai/composer/AttachmentRail'
 import { StaleConversationDivider, useStaleConversationBoundary } from '../ai/staleConversationDivider'
+import { narrateTurnStats } from '../observability/narrate'
 import { AutoGrowTextarea } from '../ai/composer/AutoGrowTextarea'
 import { COMPOSER_ATTACHMENT_ACCEPT, useComposerAttachments } from '../ai/composer/useComposerAttachments'
 
@@ -265,8 +266,11 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
         },
       })
       const reply = readWorkbenchAiReplyText(response) || '（空响应：AI 没有返回文本）'
+      const totalTokens = response.usage?.totalTokens
       setMessages((prev) => prev.map((message) => (
-        message.id === pendingId ? { ...message, content: reply } : message
+        message.id === pendingId
+          ? { ...message, content: reply, ...(totalTokens ? { turnStats: { totalTokens } } : {}) }
+          : message
       )))
     } catch (err) {
       const message = err instanceof Error ? err.message : '创作 AI 调用失败'
@@ -435,6 +439,9 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
                     className="workbench-creation-ai__reply-action"
                     content={message.content}
                   />
+                ) : null}
+                {message.turnStats?.totalTokens ? (
+                  <span className={cn('block mt-1 text-micro text-nomi-ink-40')}>{narrateTurnStats(message.turnStats.totalTokens)}</span>
                 ) : null}
               </div>
             </article>

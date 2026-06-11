@@ -36,3 +36,9 @@ const NARRATE_PROGRESS: Record<GenerationProgressPhase, (ctx: ProgressNarrationC
 export function narrateProgress(phase: GenerationProgressPhase, ctx: ProgressNarrationContext = {}): string {
   return NARRATE_PROGRESS[phase](ctx)
 }
+
+/** 轮次 footer(S3 可感知出口):本轮 token 用量;S7 成本落地后此形态切金额并删除(P1)。 */
+export function narrateTurnStats(totalTokens: number): string {
+  if (totalTokens >= 1000) return `本轮 ~${(totalTokens / 1000).toFixed(1)}k tokens`
+  return `本轮 ${totalTokens} tokens`
+}
