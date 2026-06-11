@@ -5,10 +5,11 @@
  * - 待接入：默认展开，body 显 key 输入 + 解锁。
  * - 已连通：默认折叠；展开后 key 区显「已保存 · 更换/断开」，模型 chip 点亮。
  * 填 key → upsertVendorApiKey（后端零改动，模型已 seed）。模型清单从 catalog 派生。
+ * 接入地址可就地编辑 → upsertVendor 只改 baseUrlHint（seed 存在即跳过，用户改动不被启动刷回）。
  * 样张：docs/design/mockups/onboarding-panel-A.html
  */
 import React from 'react'
-import { IconKey, IconExternalLink } from '@tabler/icons-react'
+import { IconKey, IconExternalLink, IconPencil } from '@tabler/icons-react'
 import { cn } from '../../utils/cn'
 import { getDesktopBridge } from '../../desktop/bridge'
 import type { KnownVendor } from '../../config/knownVendors'
@@ -42,6 +43,8 @@ export function VendorOnboardCard({
   const [keyDraft, setKeyDraft] = React.useState('')
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState('')
+  const [urlEditing, setUrlEditing] = React.useState(false)
+  const [urlDraft, setUrlDraft] = React.useState('')
 
   React.useEffect(() => {
     setEditing(!hasApiKey)
@@ -87,6 +90,27 @@ export function VendorOnboardCard({
       setBusy(false)
     }
   }, [directory.vendorKey, vendorName, onChanged])
+
+  const handleSaveBaseUrl = React.useCallback(() => {
+    const next = urlDraft.trim().replace(/\/+$/, '')
+    if (!/^https?:\/\/\S+$/.test(next)) {
+      setError('接入地址需以 http(s):// 开头。')
+      return
+    }
+    const bridge = getDesktopBridge()
+    if (!bridge) return
+    setBusy(true)
+    setError('')
+    try {
+      bridge.modelCatalog.upsertVendor({ key: directory.vendorKey, baseUrlHint: next })
+      setUrlEditing(false)
+      onChanged()
+    } catch (e) {
+      setError(`保存失败：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setBusy(false)
+    }
+  }, [urlDraft, directory.vendorKey, onChanged])
 
   const openPromo = React.useCallback(() => {
     if (directory.promo) window.open(directory.promo.url, '_blank', 'noopener')
@@ -172,7 +196,61 @@ export function VendorOnboardCard({
 
       {error ? <div className="text-caption text-workbench-danger">{error}</div> : null}
 
-      {baseUrl ? <div className="text-caption text-nomi-ink-30 truncate">接入地址：{baseUrl}</div> : null}
+      {urlEditing ? (
+        <div className="flex gap-2">
+          <input
+            type="text"
+            aria-label={`${vendorName} 接入地址`}
+            placeholder="https://…"
+            value={urlDraft}
+            onChange={(e) => setUrlDraft(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSaveBaseUrl()
+              if (e.key === 'Escape') { setUrlEditing(false); setError('') }
+            }}
+            disabled={busy}
+            autoFocus
+            className={cn(
+              'flex-1 min-w-0 h-8 rounded-nomi-sm border border-nomi-line bg-nomi-paper px-2.5',
+              'text-body-sm text-nomi-ink placeholder:text-nomi-ink-40',
+              'outline-none focus:border-nomi-accent',
+            )}
+          />
+          <button
+            type="button"
+            onClick={handleSaveBaseUrl}
+            disabled={busy}
+            className={cn(
+              'shrink-0 h-8 px-3 rounded-nomi-sm bg-nomi-ink text-nomi-paper',
+              'text-body-sm font-semibold',
+              'hover:bg-nomi-accent disabled:opacity-50 disabled:cursor-not-allowed',
+            )}
+          >
+            保存
+          </button>
+          <button
+            type="button"
+            onClick={() => { setUrlEditing(false); setError('') }}
+            disabled={busy}
+            className="shrink-0 text-caption text-nomi-ink-40 hover:text-nomi-ink-60"
+          >
+            取消
+          </button>
+        </div>
+      ) : baseUrl ? (
+        <div className="flex items-center gap-1 min-w-0">
+          <span className="text-caption text-nomi-ink-30 truncate">接入地址：{baseUrl}</span>
+          <button
+            type="button"
+            aria-label={`编辑 ${vendorName} 接入地址`}
+            onClick={() => { setUrlDraft(baseUrl); setUrlEditing(true) }}
+            disabled={busy}
+            className="shrink-0 p-0.5 text-nomi-ink-30 hover:text-nomi-ink-60"
+          >
+            <IconPencil size={13} stroke={1.6} />
+          </button>
+        </div>
+      ) : null}
 
       <ModelChipGroups models={models} connected={hasApiKey} />
 
