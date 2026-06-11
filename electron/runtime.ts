@@ -6,6 +6,8 @@ import { localizeAssetsForVendor, resolveAssetIngestion } from "./catalog/assetL
 import { readNomiLocalAsset, postJsonForAssetUpload } from "./assets/localAssetFile";
 import { endpoint } from "./vendorEndpoint";
 import { authQueryParams, requestJson } from "./vendor/vendorHttp";
+import { buildNormalizedRecipe, buildTaskProvenance } from "./vendor/provenance";
+import { traceVendorCompleted, traceVendorRequested } from "./events/vendorCallTrace";
 import {
   type AuthType,
   appendQueryParams,
@@ -384,8 +386,6 @@ function authHeaders(vendor: Vendor, apiKey: string): Record<string, string> {
   return buildAuthHeaders(vendor.authType as AuthType, apiKey, vendor.authHeader ?? undefined);
 }
 
-// authQueryParams 已随 requestJson 迁往 vendorHttp.ts(全仓唯一,从那里 import)。
-
 // endpoint() 已抽到 electron/vendorEndpoint.ts（纯函数，便于无 electron 的单测）
 
 export function billingKindForTaskKind(kind: ProfileKind): BillingModelKind {
@@ -468,8 +468,6 @@ function templateContext(request: TaskRequest, model: Model, apiKey: string, pro
   });
 }
 
-// requestJson + 结构化错误已拆到 electron/vendor/vendorHttp.ts(S4-0:腾空间+修错误压扁根因)。
-
 export function buildProfileHttpRequest(input: {
   vendor: Vendor;
   model: Model;
@@ -534,6 +532,9 @@ export async function buildProfileTaskResult(input: {
   wantedKind: BillingModelKind;
   projectId?: string;
   nodeId?: string;
+  /** S4-1:provenance 统一在本出口写(修主路径漏写根因),需要 vendor/model。 */
+  vendor?: Vendor;
+  model?: Model;
 }): Promise<{ result: TaskResult; providerMeta: JsonRecord }> {
   const responseMapping = isJsonRecord(input.operation.response_mapping) ? input.operation.response_mapping : null;
   const providerMetaMapping = isJsonRecord(input.operation.provider_meta_mapping) ? input.operation.provider_meta_mapping : null;
@@ -567,6 +568,10 @@ export async function buildProfileTaskResult(input: {
       status,
       assets,
       raw: input.response,
+      // S4-1:profile 主路径补 provenance(与 fallback 共用 buildTaskProvenance,单一真相)。
+      ...(status === "succeeded" && input.vendor && input.model
+        ? { provenance: buildTaskProvenance({ vendor: input.vendor, model: input.model, request: input.request, vendorRequestId: taskId }) }
+        : {}),
     },
   };
 }
@@ -596,7 +601,13 @@ export async function runTask(payload: unknown): Promise<TaskResult> {
       wantedKind,
       projectId,
       nodeId,
+      vendor,
+      model,
     });
+    traceVendorRequested(projectId, { runId: normalized.result.id, nodeId, recipe: buildNormalizedRecipe({ vendor, model, mappingId: trim((mapping as unknown as JsonRecord).id), request }) });
+    if (["succeeded", "failed"].includes(normalized.result.status)) {
+      traceVendorCompleted(projectId, { runId: normalized.result.id, nodeId, status: normalized.result.status as "succeeded" | "failed", assetCount: normalized.result.assets.length });
+    }
     if (!["succeeded", "failed"].includes(normalized.result.status)) {
       taskCache.set(normalized.result.id, {
         vendor: vendorKey,
@@ -643,6 +654,7 @@ export async function runTask(payload: unknown): Promise<TaskResult> {
   });
   const assetUrl = extractAssetUrl(providerResponse);
   const upstreamTaskId = extractTaskIdShared(providerResponse) || taskId;
+  traceVendorRequested(projectId, { runId: upstreamTaskId, nodeId, recipe: buildNormalizedRecipe({ vendor, model, request }) });
   if (!assetUrl) {
     taskCache.set(upstreamTaskId, { vendor: vendorKey, request, raw: providerResponse, model, projectId, nodeId, wantedKind });
     return { id: upstreamTaskId, kind, status: "queued", assets: [], raw: providerResponse };
@@ -651,24 +663,9 @@ export async function runTask(payload: unknown): Promise<TaskResult> {
   const asset: TaskResult["assets"][number] = projectId
     ? await localizeTaskAsset(projectId, assetUrl, type, nodeId)
     : { type, url: assetUrl, thumbnailUrl: type === "image" ? assetUrl : null };
-  // E11: provenance — captures everything needed to reproduce this exact
-  // generation months later (model + prompt + seed + params).
-  const provenance: NonNullable<TaskResult["provenance"]> = {
-    provider: vendor.key,
-    modelKey: model.modelAlias || model.modelKey,
-    prompt: request.prompt,
-    ...(request.negativePrompt ? { negativePrompt: request.negativePrompt } : {}),
-    ...(typeof request.seed === "number" ? { seed: request.seed } : {}),
-    params: {
-      ...(request.width != null ? { width: request.width } : {}),
-      ...(request.height != null ? { height: request.height } : {}),
-      ...(request.steps != null ? { steps: request.steps } : {}),
-      ...(request.cfgScale != null ? { cfgScale: request.cfgScale } : {}),
-      ...(request.extras ? { extras: request.extras } : {}),
-    },
-    vendorRequestId: upstreamTaskId,
-    timestamp: Date.now(),
-  };
+  // E11 provenance + S4-1 终态事件:与 profile 路径共用 vendor/provenance 模块(单一真相)。
+  const provenance = buildTaskProvenance({ vendor, model, request, vendorRequestId: upstreamTaskId });
+  traceVendorCompleted(projectId, { runId: upstreamTaskId, nodeId, status: "succeeded", assetCount: 1 });
   return { id: upstreamTaskId, kind, status: "succeeded", assets: [asset], raw: providerResponse, provenance };
 }
 
@@ -717,8 +714,12 @@ export async function fetchTaskResult(payload: unknown): Promise<{ vendor: strin
       wantedKind: cached.wantedKind || model.kind,
       projectId: cached.projectId,
       nodeId: cached.nodeId,
+      vendor,
+      model,
     });
     if (normalized.result.status === "succeeded" || normalized.result.status === "failed") {
+      // 终态才入日志(轮询 tick 不记);cache.delete 保证单次触发
+      traceVendorCompleted(cached.projectId, { runId: taskId, nodeId: cached.nodeId, status: normalized.result.status, assetCount: normalized.result.assets.length });
       taskCache.delete(taskId);
     } else {
       taskCache.set(taskId, {

@@ -39,6 +39,8 @@ import { applySystemProxy } from "./systemProxy";
 import { registerExportJobIpc } from "./export/exportJobIpc";
 import { registerAgentChatV2Ipc } from "./ai/agentChatV2Ipc";
 import { registerConversationsIpc } from "./conversations/conversationsIpc";
+import { setEventLogSecretsProvider } from "./events/eventLogRepository";
+import { catalogSecretsProvider } from "./events/secretsProvider";
 import { registerOnboardingIpc } from "./ai/onboarding/onboardingIpc";
 
 // 尽早安装：捕获引导阶段起的 uncaughtException / unhandledRejection，落盘到 app logs（P0-8）。
@@ -266,6 +268,8 @@ function registerIpc(): void {
   registerAgentChatV2Ipc();
   registerConversationsIpc();
   registerOnboardingIpc();
+  // S4-1 评测安全铁律:事件落盘前,已配置的 vendor key 精确匹配脱敏(形态兜底之外的地基)。
+  setEventLogSecretsProvider(catalogSecretsProvider);
 }
 
 function registerLocalProtocol(): void {
