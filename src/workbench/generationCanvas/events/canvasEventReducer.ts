@@ -93,6 +93,8 @@ export function applyCanvasEvent(projection: CanvasProjection, event: Replayable
     case 'canvas.group.created': {
       const group = payload.group as NodeGroup | undefined
       if (!group?.id) return projection
+      // 幂等(S5-b-1):尾部重放可能重看快照里已有的事件
+      if (projection.groups.some((candidate) => candidate.id === group.id)) return projection
       return { ...projection, groups: [...projection.groups, group] }
     }
     case 'canvas.group.updated': {

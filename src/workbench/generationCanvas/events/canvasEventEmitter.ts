@@ -33,6 +33,20 @@ export function setCanvasEventSinkForTests(sink: ((events: readonly CanvasShadow
 
 const mintId = () => `evt_${crypto.randomUUID().slice(0, 12)}`
 
+// 该项目日志的最后已知 seq(append 回执维护)——写进项目快照,hydrate 时重放其后的尾巴。
+// 注意:回执异步到达,save 可能读到略旧的值 → 尾部重放会重看几条已在快照里的事件,
+// 因此 reducer 的全部 case 必须幂等(canvasEventReducer 已逐 case 保证)。
+let lastAppliedSeq = 0
+
+export function getCanvasEventLastSeq(): number {
+  return lastAppliedSeq
+}
+
+/** hydrate 时以快照里的 seq 起步(尾部重放后再被 append 回执推进)。 */
+export function seedCanvasEventLastSeq(seq: number): void {
+  lastAppliedSeq = Math.max(0, Number(seq) || 0)
+}
+
 function flushNow(): void {
   if (timer) {
     clearTimeout(timer)
@@ -44,7 +58,12 @@ function flushNow(): void {
   const projectId = projectIdProvider()
   const api = getDesktopBridge()?.events
   if (!projectId || !api) return
-  void api.append(projectId, batch).catch(() => {})
+  void api
+    .append(projectId, batch)
+    .then((result) => {
+      if (result?.lastSeq) lastAppliedSeq = Math.max(lastAppliedSeq, result.lastSeq)
+    })
+    .catch(() => {})
 }
 
 /**

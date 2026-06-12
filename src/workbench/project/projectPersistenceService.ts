@@ -3,6 +3,7 @@ import { readWindowUrlParam } from '../windowUrlParam'
 import { upgradeWorkbenchProjectMediaUrls, normalizeLegacyImageAssetKinds } from './projectMediaMigration'
 import {
   clearActiveWorkbenchProjectSaveTarget,
+  replayCanvasEventTailAndSealGenesis,
   restoreWorkbenchProjectPayload,
   subscribeWorkbenchProjectPersistence,
 } from './workbenchProjectSession'
@@ -91,6 +92,8 @@ export function createWorkbenchProjectPersistenceService(deps: Dependencies): Wo
       saveLocalProject(upgraded.id, upgraded.payload, upgraded.name)
     }
     restoreWorkbenchProjectPayload(upgraded.payload)
+    // S5-b-1:重放快照没盖到的事件尾巴(崩溃恢复),完成后以含尾后态发 genesis。
+    await replayCanvasEventTailAndSealGenesis(upgraded.id, upgraded.payload)
     writeLastActiveProjectId(upgraded.id)
     deps.setActiveProject(upgraded)
     deps.setView('studio')

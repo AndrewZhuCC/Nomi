@@ -59,7 +59,9 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
   },
   events: {
     append: (projectId: string, events: unknown[]) =>
-      ipcRenderer.invoke("nomi:events:append", { projectId, events }) as Promise<{ ok: boolean; count: number }>,
+      ipcRenderer.invoke("nomi:events:append", { projectId, events }) as Promise<{ ok: boolean; count: number; lastSeq: number }>,
+    read: (projectId: string, fromSeq: number) =>
+      ipcRenderer.invoke("nomi:events:read", { projectId, fromSeq }) as Promise<{ ok: boolean; events: unknown[] }>,
   },
   review: {
     onEvent: (callback: (payload: unknown) => void) => {

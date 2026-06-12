@@ -102,6 +102,8 @@ export type GenerationCanvasState = {
   /** 持久化视图(S5-b-0):无 selectedNodeIds——选区是会话态不进项目文件。 */
   readDocumentSnapshot: () => Omit<GenerationCanvasSnapshot, 'selectedNodeIds'>
   restoreSnapshot: (snapshot: unknown) => void
+  /** S5-b-1 崩溃恢复:把快照之后落盘的事件尾巴重放回投影(reducer 幂等)。 */
+  applyEventTail: (events: readonly { type: string; payload: Record<string, unknown> }[]) => void
 } & CanvasNodeActions & CanvasGraphActions & CanvasRunActions
 
 /** Slice creator typed against the store's middleware stack (subscribeWithSelector + immer). */

@@ -113,9 +113,10 @@ export type DesktopBridge = {
     chatV2SessionAlive?: (sessionKey: string) => Promise<{ alive: boolean }>
     onChatV2Event: (sessionId: string, callback: (event: unknown) => void) => () => void
   }
-  /** S5-a 画布影子事件 → 单写者日志仓库(seq/脱敏/截断在主进程单点)。 */
+  /** S5-a/b 画布事件 → 单写者日志仓库(seq/脱敏/截断在主进程单点);read 供 hydrate 尾部重放与轨迹。 */
   events?: {
-    append: (projectId: string, events: unknown[]) => Promise<{ ok: boolean; count: number }>
+    append: (projectId: string, events: unknown[]) => Promise<{ ok: boolean; count: number; lastSeq: number }>
+    read: (projectId: string, fromSeq: number) => Promise<{ ok: boolean; events: unknown[] }>
   }
   /** S4-2b 技术自检结果广播(主进程异步旁路 → 节点 ⚠ 投影)。 */
   review?: {

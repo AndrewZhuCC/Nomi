@@ -1,5 +1,7 @@
 import { useGenerationCanvasStore } from '../generationCanvas/store/generationCanvasStore'
 import { useWorkbenchStore } from '../workbenchStore'
+import { emitCanvasGesture, getCanvasEventLastSeq, seedCanvasEventLastSeq } from '../generationCanvas/events/canvasEventEmitter'
+import { getDesktopBridge } from '../../desktop/bridge'
 import type { WorkbenchProjectPayload, WorkbenchProjectRecordV1 } from './projectRecordSchema'
 
 export function readCurrentWorkbenchProjectPayload(): WorkbenchProjectPayload {
@@ -11,6 +13,8 @@ export function readCurrentWorkbenchProjectPayload(): WorkbenchProjectPayload {
     // S5-b-0:持久化走 document 视图(选区是会话态不进项目文件)
     generationCanvas: generation.readDocumentSnapshot(),
     categories: workbench.categories,
+    // S5-b-1:尾部重放游标(append 回执维护;回执延迟导致略旧也安全——reducer 幂等)
+    generationCanvasLastSeq: getCanvasEventLastSeq(),
   }
 }
 
@@ -19,6 +23,37 @@ export function restoreWorkbenchProjectPayload(payload: WorkbenchProjectPayload)
   useWorkbenchStore.getState().setTimeline(payload.timeline)
   useWorkbenchStore.getState().setCategories(payload.categories)
   useGenerationCanvasStore.getState().restoreSnapshot(payload.generationCanvas)
+}
+
+/**
+ * S5-b-1 崩溃恢复:restore 之后调——重放快照没盖到的事件尾巴,再以"含尾巴的后态"
+ * 发 genesis(顺序铁律:genesis 在尾部重放之后,否则磁盘日志最终态丢尾巴)。
+ * 老项目(payload 无 lastSeq 字段)跳过重放只发 genesis——不拿整本日志去覆盖快照。
+ */
+export async function replayCanvasEventTailAndSealGenesis(
+  projectId: string,
+  payload: WorkbenchProjectPayload,
+): Promise<void> {
+  const lastSeq = Number(payload.generationCanvasLastSeq) || 0
+  seedCanvasEventLastSeq(lastSeq)
+  const api = getDesktopBridge()?.events
+  if (api && projectId && payload.generationCanvasLastSeq != null && lastSeq > 0) {
+    try {
+      const { events } = await api.read(projectId, lastSeq)
+      const canvasTail = (events as { type?: string; payload?: Record<string, unknown>; seq?: number }[])
+        .filter((event) => typeof event?.type === 'string' && event.type.startsWith('canvas.') && event.payload)
+      if (canvasTail.length) {
+        useGenerationCanvasStore.getState().applyEventTail(canvasTail as { type: string; payload: Record<string, unknown> }[])
+        seedCanvasEventLastSeq(Math.max(lastSeq, ...canvasTail.map((event) => Number(event.seq) || 0)))
+      }
+    } catch {
+      /* 旁路:读尾巴失败退回纯快照,不影响打开项目 */
+    }
+  }
+  const post = useGenerationCanvasStore.getState()
+  emitCanvasGesture([
+    { type: 'canvas.snapshot.restored', payload: { snapshot: { nodes: post.nodes, edges: post.edges, groups: post.groups } } },
+  ])
 }
 
 export type WorkbenchProjectSaveFn = (

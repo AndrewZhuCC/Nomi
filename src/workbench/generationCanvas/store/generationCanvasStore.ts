@@ -19,6 +19,7 @@ import {
 } from './canvasClipboard'
 import { normalizeStoreSnapshot, seedNodes } from './canvasSnapshotNormalizer'
 import { emitCanvasGesture } from '../events/canvasEventEmitter'
+import { applyCanvasEvent } from '../events/canvasEventReducer'
 import type { GenerationCanvasState } from './canvasStoreTypes'
 import { createCanvasNodeActions } from './canvasNodeActions'
 import { createCanvasGraphActions } from './canvasGraphActions'
@@ -183,8 +184,17 @@ export const useGenerationCanvasStore = create<GenerationCanvasState>()(subscrib
       hasClipboard: false,
       ...getHistoryFlags(),
     })
-    // hydrate 即 genesis(影子期):之后的重放从这帧起步;S5-b 翻正后由 lastAppliedSeq 接管
-    emitCanvasGesture([{ type: 'canvas.snapshot.restored', payload: { snapshot: { nodes: normalized.nodes, edges: normalized.edges, groups: normalized.groups } } }])
+    // genesis 事件不在这里发(S5-b-1):必须等 hydrate 尾部重放完成后由
+    // workbenchProjectSession 以"含尾巴的后态"发,否则磁盘日志最终态会丢尾巴。
+  },
+  applyEventTail: (events) => {
+    // S5-b-1 崩溃恢复:把快照之后落盘的事件(lastSeq 尾巴)重放回投影。
+    // reducer 全 case 幂等,重看快照内已有事件安全。
+    if (!events.length) return
+    const state = get()
+    let projection = { nodes: state.nodes, edges: state.edges, groups: state.groups }
+    for (const event of events) projection = applyCanvasEvent(projection, event)
+    set({ nodes: projection.nodes, edges: projection.edges, groups: projection.groups })
   },
   ...createCanvasNodeActions(set, get, store),
   ...createCanvasGraphActions(set, get, store),

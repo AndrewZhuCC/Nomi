@@ -272,6 +272,25 @@ describe('S5-a replay ≡ snapshot(属性测试,CI 安全网)', () => {
     )
   })
 
+  it('applyEventTail 幂等:同一条尾巴重放两遍结果不变(S5-b-1 崩溃恢复的安全前提)', () => {
+    __resetGenerationCanvasHistoryForTests()
+    useGenerationCanvasStore.getState().restoreSnapshot({ nodes: [], edges: [], groups: [] })
+    captured = []
+    const node = useGenerationCanvasStore.getState().addNode({ kind: 'image', title: 'n', prompt: 'p' })
+    useGenerationCanvasStore.getState().moveNode(node.id, { x: 7, y: 9 })
+    useGenerationCanvasStore.getState().createGroup('shots', 'g')
+    const tail = captured.map((event) => ({ type: event.type, payload: event.payload }))
+    // 模拟崩溃恢复:回到空快照,重放尾巴一遍 vs 两遍
+    useGenerationCanvasStore.getState().restoreSnapshot({ nodes: [], edges: [], groups: [] })
+    useGenerationCanvasStore.getState().applyEventTail(tail)
+    const once = JSON.parse(JSON.stringify({ n: useGenerationCanvasStore.getState().nodes, g: useGenerationCanvasStore.getState().groups }))
+    useGenerationCanvasStore.getState().applyEventTail(tail)
+    const twice = JSON.parse(JSON.stringify({ n: useGenerationCanvasStore.getState().nodes, g: useGenerationCanvasStore.getState().groups }))
+    expect(twice).toEqual(once)
+    expect(once.n).toHaveLength(1)
+    expect(once.g).toHaveLength(1)
+  })
+
   it('setNodeProgress(轮询 tick)不发事件——瞬态不入日志(§4.3 终态收敛)', () => {
     __resetGenerationCanvasHistoryForTests()
     useGenerationCanvasStore.getState().restoreSnapshot({ nodes: [], edges: [], groups: [] })
