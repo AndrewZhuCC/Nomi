@@ -109,4 +109,28 @@
 | C token 优化单独先行(T1-T3) | 界面不变,每轮 29k→8-10k | 小:~1d;与 A/B 正交,**建议无论选哪个都先做** |
 
 样张:`docs/design/mockups/2026-06-12-assistant-panel-redesign.html`(L1 全态+提议卡四形态+回执行两态)。
+三方案对比样张(真实工作台比例):`docs/design/mockups/2026-06-12-assistant-redesign-3-options.html`。
 按 R8:样张获批后才进实现;实现后逐项对账。
+
+---
+
+## 五、实现回填(2026-06-12,用户拍板方案三)
+
+**C(token 优化)已落地**:commit 6f51c6c(T1/T2/T3 三刀)+02bd287(缓存命中观测)。
+真机实测同场景输入 22.7k→7.6k,缓存命中 80%。详见两 commit。
+
+**方案三(时间线)已落地**:commit 25ca00c。
+
+| 做了 | 说明 |
+|---|---|
+| 时间线导轨 | `AssistantTimeline.tsx`:状态点(done 绿/active 蓝带 ring/warn)+连接线;一轮=气泡(用户)→叙述步→提议步→回执/出入步 |
+| 杀 raw JSON | `toolCallSummary.ts` 的 `describeToolCallDetail`:connect 翻「A → B」,不再 JSON;单测锁 `not.toContain('{')` |
+| 统一提议卡 | 三卡(Plan/Committed/Deviation)加 `flat` 去框,导轨提供结构,交互逻辑零改动 |
+| 删正文拼接 | 「已执行 N 个工具调用」删掉(回执已说) |
+| token 降噪 | 仍在叙述步底部 micro 灰字(已够弱);缓存命中率随 02bd287 一并显示 |
+
+**真机 R13 全状态过**:叙述/计划/connect(人话)/committed 回执/对账出入,截图 `tests/ux/shots/s3-*.png`。
+
+**本次暂缓(fast-follow,需另拍板)**:
+- **L2「项目脑」头部浮层**:把两条常驻 fold(AssistantToolsFold「6 个工具」+ MemoryFold「AI 记得 N 条」)收进 header 一个入口(有新记忆亮蓝点)。当前两 fold 仍在时间线上方。这是样张里「三案共同点」的一部分,但与时间线正交,独立做更稳。
+- **L3 审计层「▸详情」**:committed 回执的「查看步骤」已在(CommittedProposalCard),但 token 用量进详情层、对账偏差 per-field diff 折进详情尚未做(当前 token 在叙述步底部、偏差是独立 warn 步)。
