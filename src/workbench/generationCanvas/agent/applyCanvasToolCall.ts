@@ -43,6 +43,11 @@ function resolveNodeId(id: string): string {
   return clientIdRegistry.get(id) ?? id
 }
 
+/** S6-4 锁求值要把 LLM 口中的 clientId 翻译成真实节点 id 再查锁面(gate 调用方用)。 */
+export function resolveCanvasToolNodeId(id: string): string {
+  return resolveNodeId(id)
+}
+
 export async function applyCanvasToolCall(toolName: string, args: unknown, gesture?: CanvasGestureContext): Promise<unknown> {
   const record = args && typeof args === 'object' ? (args as Record<string, unknown>) : {}
   // S6-2:提议事务把手势上下文传进来,store 变更段(纯同步)包在上下文里——途经 action

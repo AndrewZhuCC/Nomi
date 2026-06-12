@@ -5,6 +5,7 @@ import { getAgentCreatableGenerationNodeKinds } from '../model/generationNodeKin
 import { applyCanvasToolCall } from './applyCanvasToolCall'
 import { applyProposalBatch } from './proposalTxn'
 import { evaluateGate } from './gate'
+import { buildLockGateContext } from './lockGateContext'
 import { listAvailableModelsForAgent, formatAvailableModelsForPrompt } from './availableModels'
 
 export type { ToolCallEvent } from '../../ai/workbenchAgentRunner'
@@ -101,7 +102,7 @@ async function defaultExecuteToolCall(event: ToolCallEvent): Promise<void> {
   const { toolName, args, confirm } = event
   // S6-1/S6-2:auto 路径同样过 gate(此前完全绕过)——只读直通 silent;写操作代用户点头,
   // 但仍走提议事务(proposalId 贯穿、txn 事件入账,与面板路径同一台账)。
-  const decision = evaluateGate({ kind: 'tool-call', toolName, args })
+  const decision = evaluateGate({ kind: 'tool-call', toolName, args }, buildLockGateContext())
   if (decision.outcome === 'deny') {
     await confirm({ ok: false, message: decision.reason, denied: true })
     return

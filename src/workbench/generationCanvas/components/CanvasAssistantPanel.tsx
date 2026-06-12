@@ -12,6 +12,7 @@ import { generationCanvasTools } from '../agent/generationCanvasTools'
 import { applyCanvasToolCall } from '../agent/applyCanvasToolCall'
 import { applyProposalBatch } from '../agent/proposalTxn'
 import { evaluateGate } from '../agent/gate'
+import { buildLockGateContext } from '../agent/lockGateContext'
 import {
   buildStoryboardPlanningMessage,
   STORYBOARD_PLANNER_SKILL,
@@ -292,8 +293,8 @@ export default function CanvasAssistantPanel({
           },
           onToolCall: (event: ToolCallEvent) => {
             toolEmittedCount += 1
-            // 统一求值流(§6.1):一道门替代散落 if。allow=只读直通 / deny=校验拒绝 / ask=等点头。
-            const decision = evaluateGate({ kind: 'tool-call', toolName: event.toolName, args: event.args })
+            // 统一求值流(§6.1):一道门替代散落 if。allow=只读直通 / deny=校验/锁拒绝 / ask=等点头。
+            const decision = evaluateGate({ kind: 'tool-call', toolName: event.toolName, args: event.args }, buildLockGateContext())
             if (decision.outcome === 'deny') {
               // gate 拒绝(非用户拒):带 denied 标记 → 主进程记 gate.denied,人话回喂 LLM。
               void event.confirm({ ok: false, message: decision.reason, denied: true })

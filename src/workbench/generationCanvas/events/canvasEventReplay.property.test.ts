@@ -77,6 +77,7 @@ const opArbitrary: fc.Arbitrary<Op> = fc.oneof(
   fc.record({ kind: fc.constant<'status'>('status'), pick: fc.nat(99), status: fc.constantFrom<'queued' | 'running' | 'success' | 'error' | 'idle'>('queued', 'running', 'success', 'error', 'idle') }),
   fc.record({ kind: fc.constant<'appendRun'>('appendRun'), pick: fc.nat(99) }),
   fc.record({ kind: fc.constant<'addResult'>('addResult'), pick: fc.nat(99), url: fc.constantFrom('https://cdn/a.png', 'https://cdn/b.mp4') }),
+  fc.record({ kind: fc.constant<'lock'>('lock'), pick: fc.nat(99), locked: fc.boolean() }),
   fc.record({ kind: fc.constant<'cut'>('cut') }),
   fc.record({ kind: fc.constant<'paste'>('paste') }),
   fc.record({ kind: fc.constant<'undo'>('undo') }),
@@ -107,6 +108,11 @@ function applyOp(op: Op): void {
     case 'remove': {
       const target = pickNode(op.pick)
       if (target) store.deleteNode(target.id)
+      return
+    }
+    case 'lock': {
+      const target = pickNode(op.pick)
+      if (target) store.setNodeLocked(target.id, op.locked)
       return
     }
     case 'patch': {

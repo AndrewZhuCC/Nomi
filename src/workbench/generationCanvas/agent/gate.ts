@@ -15,10 +15,12 @@ export type GateDecision =
   | { outcome: 'deny'; reason: string } // reason = 人话(回喂 LLM 可自我修正,N14 素材)
   | { outcome: 'ask' }
 
-/** 求值上下文:S6-4 锁把 lockedNodeIds 填进来,本片留空但签名前向兼容。 */
+/** 求值上下文(S6-4 锁)。 */
 export type GateContext = {
-  /** 被用户锁住的节点 id(source 恒 user);改其 prompt/params/入边/删除 = deny。 */
-  lockedNodeIds?: ReadonlySet<string>
+  /** 被用户锁住的节点 id→标题(deny reason 用人话点名);改其 prompt/删除/入边 = deny。 */
+  lockedNodes?: ReadonlyMap<string, string>
+  /** LLM 口中的 clientId → 真实节点 id(applyCanvasToolCall 注册表;缺省原样返回)。 */
+  resolveNodeId?: (id: string) => string
 }
 
 /** 工具写/破坏性/花钱分级(T2 meta 的声明式落地;唯一真相源,取代硬编码字符串门)。 */
@@ -43,8 +45,8 @@ export function evaluateGate(intent: GateIntent, ctx: GateContext = {}): GateDec
     if (!meta) return { outcome: 'deny', reason: `不支持的操作「${intent.toolName}」` }
     // ① policy:只读直通,零摩擦(M1)。
     if (!meta.writes) return { outcome: 'allow' }
-    // ② invariant(锁):写操作命中锁住的节点 → deny。S6-4 填规则,本片 ctx 为空恒不触发。
-    const denied = evaluateLock(intent, ctx)
+    // ② invariant(锁):写操作命中锁住的节点 → deny(N11:AI 硬禁,用户软门)。
+    const denied = evaluateLock(intent.toolName, intent.args, ctx)
     if (denied) return denied
     // ③ ask:写操作排队等用户点头。
     return { outcome: 'ask' }
@@ -53,7 +55,47 @@ export function evaluateGate(intent: GateIntent, ctx: GateContext = {}): GateDec
   return { outcome: 'ask' }
 }
 
-/** 锁不变量求值(S6-4 实现):入边/改 prompt/params/删除命中锁节点 → deny;出边/移动放行。 */
-function evaluateLock(_intent: GateIntent, _ctx: GateContext): GateDecision | null {
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+
+/**
+ * 锁不变量求值(S6-4):锁面 = 改 prompt / 删除 / **入边**(改变该节点的生成输入)→ deny;
+ * **出边**(锁节点作为参考被引用,正是定妆用途)→ 放行。deny 发生在提议构建时——
+ * 注定失败的计划不让用户批准(§6.5);reason 人话点名节点+解锁路径,回喂 LLM 可自我修正。
+ */
+function evaluateLock(toolName: string, args: unknown, ctx: GateContext): GateDecision | null {
+  const locked = ctx.lockedNodes
+  if (!locked || locked.size === 0) return null
+  const resolve = ctx.resolveNodeId ?? ((id: string) => id)
+  const record = asRecord(args)
+
+  const denyFor = (nodeId: string, what: string): GateDecision => ({
+    outcome: 'deny',
+    reason: `节点「${locked.get(nodeId) || nodeId}」已被你锁定,AI 不能${what}(点节点上的锁标可一键解锁)`,
+  })
+
+  if (toolName === 'set_node_prompt') {
+    const nodeId = resolve(String(record.nodeId || '').trim())
+    if (locked.has(nodeId)) return denyFor(nodeId, '改写它的提示词')
+    return null
+  }
+  if (toolName === 'delete_canvas_nodes') {
+    const nodeIds = Array.isArray(record.nodeIds) ? record.nodeIds : []
+    for (const raw of nodeIds) {
+      const nodeId = resolve(String(raw || '').trim())
+      if (locked.has(nodeId)) return denyFor(nodeId, '删除它')
+    }
+    return null
+  }
+  if (toolName === 'connect_canvas_edges') {
+    const edges = Array.isArray(record.edges) ? record.edges : []
+    for (const raw of edges) {
+      const edge = asRecord(raw)
+      // 只看 target(入边改变锁节点的生成输入);source 是出边=被引用,放行。
+      const target = resolve(String(edge.targetClientId || edge.target || '').trim())
+      if (locked.has(target)) return denyFor(target, '给它接入新的输入边')
+    }
+    return null
+  }
   return null
 }

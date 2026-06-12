@@ -40,14 +40,12 @@ import { WorkbenchButton } from "../../../design";
 import NodeGenerationComposer from "./NodeGenerationComposer";
 import { completeNodeConnection } from "./completeNodeConnection";
 import { buildVideoPlaybackUrl } from "../../../media/videoPlaybackUrl";
-import {
-    diagnoseVideoPlaybackFailure,
-    logVideoPlaybackFailure,
-} from "../../../media/videoPlaybackDiagnostics";
+import { diagnoseVideoPlaybackFailure, logVideoPlaybackFailure } from "../../../media/videoPlaybackDiagnostics";
 import PanoramaViewer, { type PanoramaScreenshot } from "./PanoramaViewer";
 import { getGenerationNodeExecutionKind, isImageLikeGenerationNodeKind } from "../model/generationNodeKinds";
 import { applyFixationMakeup } from "../fixation/buildFixationNode";
 import { TechnicalReviewBadge } from "./TechnicalReviewBadge";
+import { NodeLockBadge } from "./NodeLockBadge";
 import {
     canDragGenerationNodeToTimeline,
     TIMELINE_DRAG_HANDLE_LABEL,
@@ -611,9 +609,9 @@ function BaseGenerationNodeImpl({
                     </span>
                 ) : null}
                 <TechnicalReviewBadge meta={node.meta} />
-                {/* E.2C-25 副本角标（spec §6.3）：跨分类独立副本永久显示。
-            注：经 E.2C-16 migration 后，derivedFrom 仅承载跨分类独立副本语义；
-            同分类内"基于此重生成"链路存到 regeneratedFrom 字段，不进此角标。 */}
+                <NodeLockBadge nodeId={node.id} locked={node.locked} selected={selected} />
+                {/* E.2C-25 副本角标（spec §6.3）：跨分类独立副本永久显示。经 E.2C-16 migration 后
+            derivedFrom 仅承载跨分类独立副本语义;同分类重生成链路在 regeneratedFrom,不进此角标。 */}
                 {node.derivedFrom ? (
                     <button
                         type='button'

@@ -51,9 +51,11 @@ type PromptEditorProps = {
   onReady?: (editor: Editor) => void
   /** 打 @ 时可引用的 image 参考 url 列表(= node 的 referenceImageUrls,单源)。 */
   mentionCandidates?: string[]
+  /** S6-4 节点锁:false=只读(Tiptap 官方 editable/setEditable);缺省可编辑。 */
+  editable?: boolean
 }
 
-export default function PromptEditor({ value, onChange, placeholder, className, onBlur, onReady, mentionCandidates }: PromptEditorProps): JSX.Element {
+export default function PromptEditor({ value, onChange, placeholder, className, onBlur, onReady, mentionCandidates, editable }: PromptEditorProps): JSX.Element {
   const onChangeRef = React.useRef(onChange)
   React.useEffect(() => { onChangeRef.current = onChange }, [onChange])
   // @ suggestion 候选用 ref 喂(扩展只在 editor 创建时配一次,靠 ref 读最新参考列表)。
@@ -71,6 +73,7 @@ export default function PromptEditor({ value, onChange, placeholder, className, 
       suggestionExt,
     ],
     content: promptToContent(value),
+    editable: editable !== false,
     editorProps: { attributes: { class: 'generation-canvas-v2-node__prompt-input outline-0' } },
     onUpdate: ({ editor: current }) => {
       const next = contentToPrompt(current)
@@ -82,6 +85,13 @@ export default function PromptEditor({ value, onChange, placeholder, className, 
   React.useEffect(() => {
     if (editor && onReady) onReady(editor)
   }, [editor, onReady])
+
+  // 锁切换时同步只读态(官方 setEditable;emitUpdate=false,只读切换不产出内容变更)。
+  React.useEffect(() => {
+    if (!editor || editor.isDestroyed) return
+    const next = editable !== false
+    if (editor.isEditable !== next) editor.setEditable(next, false)
+  }, [editor, editable])
 
   // 外部 value 变化(切节点 / AI 写入)→ 同步进编辑器,跳过自身刚产出的那次。
   React.useEffect(() => {

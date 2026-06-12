@@ -167,6 +167,7 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
           className={cn('min-h-[72px]')}
           value={node.prompt || ''}
           placeholder={isTextKind ? TEXT_MODE_PLACEHOLDER[textGenMode] : getGenerationNodePromptPlaceholder(node.kind)}
+          editable={!node.locked}
           onChange={(next) => updateNode(node.id, { prompt: next })}
           onBlur={() => { void persistActiveWorkbenchProjectNow().catch(() => {}) }}
           onReady={setPromptEditor}

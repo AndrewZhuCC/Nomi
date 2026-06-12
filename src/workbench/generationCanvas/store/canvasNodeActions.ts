@@ -57,6 +57,18 @@ export const createCanvasNodeActions: CanvasSliceCreator<CanvasNodeActions> = (s
     })
     emitCanvasGesture([{ type: 'canvas.node.prompt-changed', payload: { nodeId, prompt } }])
   },
+  setNodeLocked: (nodeId, locked) => {
+    const existing = get().nodes.find((candidate) => candidate.id === nodeId)
+    if (!existing || Boolean(existing.locked) === locked) return
+    set((state) => {
+      const node = state.nodes.find((candidate) => candidate.id === nodeId)
+      if (!node) return
+      node.locked = locked
+      bumpPersistRevision(state)
+    })
+    // 专用事件(非 node.updated):锁是审计要点(谁锁的/何时锁的),日志里必须一眼可查。
+    emitCanvasGesture([{ type: locked ? 'canvas.node.locked' : 'canvas.node.unlocked', payload: { nodeId } }])
+  },
   moveNode: (nodeId, position, options) => {
     // 守卫上移到 set 外(影子日志要与真实变更同真值;语义与原内嵌守卫等价)
     const existing = get().nodes.find((candidate) => candidate.id === nodeId)
