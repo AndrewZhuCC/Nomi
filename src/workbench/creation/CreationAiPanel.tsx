@@ -1,6 +1,6 @@
 import React from 'react'
 import { createPortal } from 'react-dom'
-import { IconCornerDownLeft, IconCursorText, IconFilePlus, IconMaximize, IconMinimize, IconMovie, IconPaperclip, IconPlayerStopFilled, IconReplace, IconSend2, IconSparkles, IconX } from '@tabler/icons-react'
+import { IconCornerDownLeft, IconCursorText, IconFilePlus, IconMaximize, IconMinimize, IconPaperclip, IconPlayerStopFilled, IconReplace, IconSend2, IconX } from '@tabler/icons-react'
 import { NomiLoadingMark, NomiLogoMark, NomiSelect, WorkbenchButton, WorkbenchIconButton } from '../../design'
 import { NomiMarkdown } from '../common/NomiMarkdown'
 import { cn } from '../../utils/cn'
@@ -8,6 +8,7 @@ import { runWorkbenchAgent, workbenchSessionKey, type ToolCallEvent } from '../a
 import { clearWorkbenchAgentSession } from '../../api/desktopClient'
 import { AiReplyActionButton } from '../ai/AiReplyActionButton'
 import { handleAiComposerKeyDown } from '../ai/aiComposerKeyboard'
+import { routeCreationIntent } from './creationIntentRouting'
 import type { WorkbenchAiMessage } from '../ai/workbenchAiTypes'
 import { WorkbenchAiHeaderActions } from '../ai/WorkbenchAiHeaderActions'
 import { AssistantToolsFold } from '../ai/AssistantToolsFold'
@@ -29,7 +30,6 @@ import { narrateTurnStats } from '../observability/narrate'
 import { AutoGrowTextarea } from '../ai/composer/AutoGrowTextarea'
 import { COMPOSER_ATTACHMENT_ACCEPT, useComposerAttachments } from '../ai/composer/useComposerAttachments'
 
-const STORYBOARD_REQUEST_PATTERN = /拆镜头|分镜|拆分/
 
 // The creation agent's write tools map 1:1 to the editor's document mutations.
 // Read tools auto-confirm without a card; write tools queue a confirmation card.
@@ -192,8 +192,14 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
     const userRequest = (textOverride ?? draft).trim()
     const readyAttachments = attachments.filter((item) => item.status === 'ready' && item.url)
     if (!userRequest && !selectedText && !documentText && !readyAttachments.length) return
-    if (STORYBOARD_REQUEST_PATTERN.test(userRequest)) {
+    // 对话驱动（删固定 chip，用户拍板 2026-06-13）：自然语言意图 → 甩给画布 agent。
+    const intent = routeCreationIntent(userRequest)
+    if (intent === 'storyboard') {
       launchStoryboardPlanning(userRequest || '🎬 拆镜头')
+      return
+    }
+    if (intent === 'fixation') {
+      launchFixationPlanning(userRequest || '🎭 立角色卡')
       return
     }
     const prompt = buildCreationAiPrompt({ mode: activeMode, userRequest })
@@ -513,8 +519,10 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
         <AutoGrowTextarea
           className={cn('workbench-creation-ai__input', 'min-h-14')}
           value={draft}
-          placeholder="问点什么…"
+          placeholder="拆成镜头、做成视频、立张角色卡，或问我任何事…"
           aria-label="创作 AI 输入"
+          // tour 锚点从已删的「拆镜头」chip 迁到输入框——引导改为「教用对话触发」。
+          data-tour="storyboard-cta"
           onChange={(event) => setDraft(event.currentTarget.value)}
           onKeyDown={(event) => handleAiComposerKeyDown(event, () => void send())}
           onPaste={handlePaste}
@@ -541,43 +549,9 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
             options={CREATION_AI_MODES.map((mode) => ({ value: mode.id, label: mode.shortLabel }))}
             onChange={(value) => setModeId(value as CreationAiModeId)}
           />
-          <button
-            className={cn(
-              // 纯 button + NomiSelect trigger 同款 chrome（WorkbenchButton 会强加自己的
-              // 圆角/字重，导致 chip 变圆角矩形而非全圆 pill，故不用它）。
-              'workbench-creation-ai__storyboard-chip',
-              'shrink-0 h-7 inline-flex items-center gap-1 px-2',
-              'border border-nomi-line rounded-pill bg-nomi-paper',
-              'text-caption text-nomi-ink-80 cursor-pointer',
-              'hover:border-nomi-ink-20 focus:outline-none focus-visible:border-nomi-accent',
-              'disabled:cursor-not-allowed disabled:opacity-50',
-            )}
-            type="button"
-            title="把当前正文交给 AI 拆成镜头节点"
-            data-tour="storyboard-cta"
-            disabled={sending || !(selectedText || documentText).trim()}
-            onClick={() => launchStoryboardPlanning('🎬 拆镜头')}
-          >
-            <IconMovie size={13} className="text-nomi-ink-40" />
-            <span>拆镜头</span>
-          </button>
-          <button
-            className={cn(
-              'workbench-creation-ai__fixation-chip',
-              'shrink-0 h-7 inline-flex items-center gap-1 px-2',
-              'border border-nomi-line rounded-pill bg-nomi-paper',
-              'text-caption text-nomi-ink-80 cursor-pointer',
-              'hover:border-nomi-ink-20 focus:outline-none focus-visible:border-nomi-accent',
-              'disabled:cursor-not-allowed disabled:opacity-50',
-            )}
-            type="button"
-            title="把剧本交给 AI，为主要角色/场景建卡并写好身份板提示词"
-            disabled={sending || !(selectedText || documentText).trim()}
-            onClick={() => launchFixationPlanning('🎭 立角色卡')}
-          >
-            <IconSparkles size={13} className="text-nomi-ink-40" />
-            <span>立角色卡</span>
-          </button>
+          {/* 拆镜头 / 立角色卡 不再做固定执行 chip（用户拍板：对话驱动）——
+              用户在输入框直接说「拆成 6 个镜头」「把这个故事做成视频」「给主角立张定妆卡」即可，
+              意图由 send() 的 pattern 路由给画布 agent（发现性靠 placeholder + tour 引导）。 */}
           {sending ? (
             <WorkbenchIconButton
               className={cn(

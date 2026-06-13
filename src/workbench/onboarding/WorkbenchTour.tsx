@@ -159,7 +159,7 @@ export function WorkbenchTour(): JSX.Element | null {
   const content = step === 1
     ? {
         title: '先有故事',
-        text: '示例故事已填好。点右边的「拆镜头」，Nomi 会把它变成镜头清单。',
+        text: '示例故事已填好。在下方输入框直接说「拆成镜头」或「做成视频」，Nomi 就会把它变成画布上的镜头。',
       }
     : step === 2
       ? step2Waiting
