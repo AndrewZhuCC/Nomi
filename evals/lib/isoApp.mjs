@@ -140,13 +140,27 @@ function pendingProposal(events) {
  * 批准循环:轮询事件日志,turn 收尾即返回;出现确认卡时——白名单内点「确认」,
  * 白名单外点「拒绝」(并记账)。事件日志是判断真相源,UI 只是操作对象。
  */
-export async function approveUntilTurnEnds(win, projectDir, { timeoutMs = 180_000, log = () => {} } = {}) {
+/** 终态轮事件(收尾/出错)计数——多轮评测发消息前先数一次,作 baselineTurnCount。 */
+export function countFinishedTurns(events) {
+  return events.filter((e) => e.type === "agent.turn.finished" || e.type === "agent.turn.error").length;
+}
+
+/**
+ * 「基线之后新出现的」收尾事件;还没有 → null。多轮评测的命门:不被上一轮残留的
+ * turn.finished 命中(否则第二条消息一发就瞬间假收尾,表现为 0 工具/0 文本的假阴性)。
+ */
+export function newFinishedTurn(events, baselineTurnCount = 0) {
+  const terminal = events.filter((e) => e.type === "agent.turn.finished" || e.type === "agent.turn.error");
+  return terminal.length > baselineTurnCount ? terminal[terminal.length - 1] : null;
+}
+
+export async function approveUntilTurnEnds(win, projectDir, { timeoutMs = 180_000, log = () => {}, baselineTurnCount = 0 } = {}) {
   const deadline = Date.now() + timeoutMs;
   const result = { finished: false, status: "timeout", approvals: 0, denials: 0, deniedTools: [] };
   while (Date.now() < deadline) {
     const events = readEventsLog(projectDir);
-    const last = events.findLast?.((e) => e.type === "agent.turn.finished" || e.type === "agent.turn.error") ||
-      [...events].reverse().find((e) => e.type === "agent.turn.finished" || e.type === "agent.turn.error");
+    // 多轮安全:只认基线之后的新收尾事件;单轮默认 baselineTurnCount=0,行为不变。
+    const last = newFinishedTurn(events, baselineTurnCount);
     if (last) {
       result.finished = last.type === "agent.turn.finished";
       result.status = last.type === "agent.turn.finished" ? String(last.payload?.status || "ok") : "error";

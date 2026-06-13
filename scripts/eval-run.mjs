@@ -22,6 +22,7 @@ import {
   setAssistantModelPref,
   sendAgentMessage,
   approveUntilTurnEnds,
+  countFinishedTurns,
   waitForPersistedCanvas,
   readEventsLog,
 } from "../evals/lib/isoApp.mjs";
@@ -138,8 +139,10 @@ async function runOneTrial(evalCase, trial, attempt) {
       await openGenerationAiPanel(win);
       if (modelPref) await setAssistantModelPref(win, modelPref);
       output.assistantModel = await readAssistantModelLabel(win);
+      // 多轮安全:发消息前先数终态轮(本 case 全新隔离 app=0),只等「之后新出现」的收尾。
+      const baselineTurnCount = countFinishedTurns(readEventsLog(projectDir));
       await sendAgentMessage(win, evalCase.input.message);
-      output.turn = await approveUntilTurnEnds(win, projectDir, { log: (m) => console.log(m) });
+      output.turn = await approveUntilTurnEnds(win, projectDir, { log: (m) => console.log(m), baselineTurnCount });
       const record = await waitForPersistedCanvas(win, projectDir);
       const canvas = record?.payload?.generationCanvas || { nodes: [], edges: [] };
       output.terminalState = {
