@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildCatalogTaskRequest, normalizeCatalogTaskResult, runCatalogGenerationTask } from './catalogTaskActions'
+import { resolveGenerationReferences } from './generationReferenceResolver'
 import { MODEL_ARCHETYPES } from '../../../config/modelArchetypes'
 import type { GenerationCanvasNode } from '../model/generationCanvasTypes'
 import type { TaskRequestDto, TaskResultDto } from '../../api/taskApi'
@@ -63,6 +64,36 @@ function seedanceVideoNode(modeId: string, extraMeta: Record<string, unknown>): 
     },
   }
 }
+
+// 回归锁（分镜参考链路确诊 2026-06-14）：角色卡(已生成 url) --character_ref 边--> Seedance omni 镜头，
+// 经 resolveGenerationReferences → buildCatalogTaskRequest，角色图必须以**参考图数组**送达
+// （reference_image_urls，全片身份参考），而不是被塞成 first_frame_url（只当第一帧→后面跑偏没角色）。
+describe('分镜参考投递：character_ref 边 → omni 镜头 → 角色图进 reference_image_urls', () => {
+  const charNode = (): GenerationCanvasNode => ({
+    id: 'c1', kind: 'image', title: '林夏', position: { x: 0, y: 0 }, prompt: '',
+    meta: { modelKey: 'gpt-image-2' }, result: { id: 'r', type: 'image', url: 'nomi-local://char.png', createdAt: 0 },
+  })
+  const shotOmni = (): GenerationCanvasNode => ({
+    id: 'v1', kind: 'video', title: '镜头1', position: { x: 0, y: 0 }, prompt: '男孩说话',
+    meta: { modelKey: 'bytedance/seedance-2', modelVendor: 'kie', vendor: 'kie', archetype: { id: 'seedance-2', modeId: 'omni' } },
+  })
+  const edge = { id: 'e', source: 'c1', target: 'v1', mode: 'character_ref' as const }
+
+  it('omni：角色图落 reference_image_urls，不落 first_frame_url', () => {
+    const shot = shotOmni()
+    const references = resolveGenerationReferences(shot, { nodes: [charNode(), shot], edges: [edge] })
+    const ai = buildCatalogTaskRequest(shot, { references }).request.extras?.archetypeInput as Record<string, unknown>
+    expect(ai.reference_image_urls).toEqual(['nomi-local://char.png'])
+    expect(ai.first_frame_url).toBeUndefined()
+  })
+
+  it('上游角色未生成（无 url）→ 参考为空（应由 canRunGenerationNode 拦下裸跑）', () => {
+    const char = { ...charNode(), result: undefined }
+    const shot = shotOmni()
+    const references = resolveGenerationReferences(shot, { nodes: [char, shot], edges: [edge] })
+    expect(references.referenceImages).toEqual([])
+  })
+})
 
 describe('buildCatalogTaskRequest — 档案驱动 input（extras.archetypeInput，M2 互斥）', () => {
   const archetypeInput = (node: GenerationCanvasNode) =>
