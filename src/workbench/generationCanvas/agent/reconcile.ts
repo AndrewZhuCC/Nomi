@@ -7,11 +7,20 @@
 // 模型/非法参数回退默认):用户在计划卡上看到并批准了那些 chip,执行悄悄换掉=必须可见。
 
 export type ReconcileDeviation = {
-  /** 人话定位:哪个节点/哪条边。 */
+  /** 人话定位:哪个节点/哪条边(边用节点标题,不是原始 id)。 */
   where: string
   field: string
   expected: unknown
   actual: unknown
+  /** 边没连上的人话原因(来自执行侧 skippedEdges:能力不支持/源不可参考/找不到节点)。 */
+  reason?: string
+}
+
+/** 执行侧 skip 原因码 → 人话(给对账卡显示「为什么没接上」)。 */
+const SKIP_REASON_TEXT: Record<string, string> = {
+  unsupported_reference: '所选模型不支持这种参考连接',
+  source_not_referenceable: '源节点没有可作参考的产物',
+  dangling: '连接的一端节点找不到',
 }
 
 export type ReconcileResult = {
@@ -55,8 +64,28 @@ export function reconcileProposal(input: {
   const nodeById = new Map(input.nodes.map((node) => [node.id, node]))
   const resolveId = (raw: string): string =>
     input.clientIdToNodeId[raw] ?? input.resolveExternalId?.(raw) ?? raw
+  // 边定位用节点标题(人话),缺标题/找不到节点才退原始 id。
+  const labelFor = (id: string): string => {
+    const title = nodeById.get(id)?.title
+    return typeof title === 'string' && title.trim() ? title.trim() : id
+  }
+  const edgeWhere = (source: string, target: string): string => `「${labelFor(source)}」→「${labelFor(target)}」`
+  // 从执行结果取本步跳过的边 + 原因(real id → reason 码),供「为什么没连上」显示。
+  const skippedReasons = (result: unknown): Map<string, string> => {
+    const map = new Map<string, string>()
+    const arr = asRecord(result).skippedEdges
+    if (Array.isArray(arr)) {
+      for (const raw of arr) {
+        const s = asRecord(raw)
+        const src = String(s.source || '').trim()
+        const tgt = String(s.target || '').trim()
+        if (src && tgt) map.set(`${src}→${tgt}`, String(s.reason || ''))
+      }
+    }
+    return map
+  }
 
-  const reconcileEdges = (planned: unknown[]): void => {
+  const reconcileEdges = (planned: unknown[], skipped: Map<string, string>): void => {
     for (const raw of planned) {
       const edge = asRecord(raw)
       const source = resolveId(String(edge.sourceClientId || edge.source || '').trim())
@@ -64,14 +93,21 @@ export function reconcileProposal(input: {
       if (!source || !target) continue
       const match = input.edges.find((candidate) => candidate.source === source && candidate.target === target)
       if (!match) {
-        deviations.push({ where: `${source} → ${target}`, field: '引用边', expected: '已连接', actual: '未连接' })
+        const code = skipped.get(`${source}→${target}`)
+        deviations.push({
+          where: edgeWhere(source, target),
+          field: '引用边',
+          expected: '已连接',
+          actual: '未连接',
+          ...(code ? { reason: SKIP_REASON_TEXT[code] ?? code } : {}),
+        })
         continue
       }
       // T1：批准的边语义（mode）必须原样落地；计划未指定 mode 则通配（向后兼容旧轨迹）；
       // 落地侧 mode 缺省视作通用参考（'reference'），与计划里的显式 reference 等价。
       const plannedMode = typeof edge.mode === 'string' && edge.mode ? edge.mode : undefined
       if (plannedMode && (match.mode ?? 'reference') !== plannedMode) {
-        deviations.push({ where: `${source} → ${target}`, field: '边语义', expected: plannedMode, actual: match.mode ?? '(通用参考)' })
+        deviations.push({ where: edgeWhere(source, target), field: '边语义', expected: plannedMode, actual: match.mode ?? '(通用参考)' })
       }
     }
   }
@@ -113,13 +149,13 @@ export function reconcileProposal(input: {
           }
         }
       })
-      // 同计划携带的边（节点+边一次批准）：与节点同步对账。
-      reconcileEdges(Array.isArray(step.effectiveArgs.edges) ? step.effectiveArgs.edges : [])
+      // 同计划携带的边（节点+边一次批准）：与节点同步对账，带上执行侧跳过原因。
+      reconcileEdges(Array.isArray(step.effectiveArgs.edges) ? step.effectiveArgs.edges : [], skippedReasons(step.result))
       continue
     }
 
     if (step.toolName === 'connect_canvas_edges') {
-      reconcileEdges(Array.isArray(step.effectiveArgs.edges) ? step.effectiveArgs.edges : [])
+      reconcileEdges(Array.isArray(step.effectiveArgs.edges) ? step.effectiveArgs.edges : [], skippedReasons(step.result))
       continue
     }
 

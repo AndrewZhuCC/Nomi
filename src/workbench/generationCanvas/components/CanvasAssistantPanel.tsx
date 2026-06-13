@@ -537,6 +537,13 @@ export default function CanvasAssistantPanel({
           setDeviationReport(null)
         }}
         onDeviationDismiss={() => setDeviationReport(null)}
+        onDeviationAiFix={() => {
+          // 让 AI 读画布、用所选模型支持的方式把没接上的参考连接重连(或换支持的模型)。
+          submitAgentMessage(
+            '刚才有几条参考连接没接上（所选模型不支持那种连接方式）。请先读画布，把这些没连上的参考连接，用所选模型支持的连接方式重连；如果模型确实不支持，就换成支持的模型再连。',
+          )
+          setDeviationReport(null)
+        }}
         threadBottomRef={threadBottomRef}
       />
       <form

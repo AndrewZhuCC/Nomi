@@ -107,6 +107,26 @@ describe('reconcileProposal — S6-3 对账纯函数(N12)', () => {
     expect(result.deviations[0].field).toBe('引用边')
   })
 
+  it('边没连上 → where 用节点标题(不是原始 id)+ 带执行侧跳过原因(完整版重设计)', () => {
+    const result = reconcileProposal({
+      steps: [
+        {
+          toolName: 'connect_canvas_edges',
+          effectiveArgs: { edges: [{ sourceClientId: 'c2', targetClientId: 'c1' }] }, // real-2→real-1 不存在
+          result: { skippedEdges: [{ source: 'real-2', target: 'real-1', mode: 'first_frame', reason: 'unsupported_reference' }] },
+        },
+      ],
+      clientIdToNodeId,
+      nodes,
+      edges,
+    })
+    expect(result.deviations[0]).toMatchObject({
+      where: '「镜头 2」→「镜头 1」', // 标题，非 real-2 / real-1
+      field: '引用边',
+      reason: '所选模型不支持这种参考连接',
+    })
+  })
+
   it('create 步随计划携带的边（节点+边一次批准）→ 与节点同步对账', () => {
     const ok = reconcileProposal({
       steps: [

@@ -81,6 +81,8 @@ export type AssistantTimelineProps = {
   deviationReport: ReconcileDeviation[] | null
   onDeviationUndo: () => void
   onDeviationDismiss: () => void
+  /** 让 AI 用支持的方式重连没接上的边(完整版重设计)。 */
+  onDeviationAiFix: () => void
   threadBottomRef: React.RefObject<HTMLDivElement>
 }
 
@@ -100,12 +102,13 @@ export default function AssistantTimeline(props: AssistantTimelineProps): JSX.El
       status: 'warn',
       render: () => (
         <div className={cn('flex flex-col gap-1')}>
-          <StepHeader title={`执行与批准有 ${props.deviationReport!.length} 处出入`} badge="⚠" badgeTone="warn" />
+          <StepHeader title={`这次有 ${props.deviationReport!.length} 处没按计划生效`} badge="⚠" badgeTone="warn" />
           <ReconcileDeviationCard
             flat
             deviations={props.deviationReport!}
             onUndoAll={props.onDeviationUndo}
             onDismiss={props.onDeviationDismiss}
+            onAiFix={props.onDeviationAiFix}
           />
         </div>
       ),
