@@ -41,7 +41,7 @@ function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
 export function drawTextBox(ctx: CanvasRenderingContext2D, clip: TimelineTextClip, width: number, height: number): void {
   const content = (clip.text || '').trim()
   if (!content) return
-  const box = resolveTextBox(clip.style, width, height)
+  const box = resolveTextBox(clip, width, height)
   const innerMaxWidth = box.maxWidthPx - (box.hasBackdrop ? box.fontSizePx * 1.4 : 0)
 
   ctx.save()
@@ -59,10 +59,9 @@ export function drawTextBox(ctx: CanvasRenderingContext2D, clip: TimelineTextCli
   const boxWidth = Math.min(box.maxWidthPx, widestLine + padX * 2)
   const boxHeight = textBlockHeight + padY * 2
 
-  // 文本框的中心 y：caption 锚底（anchorY = 框底），title 锚画布中心。
-  const centerY = box.anchor === 'bottom' ? box.anchorY - boxHeight / 2 : box.anchorY
+  // 中心锚点：绕 (centerX, centerY) 摆放（rotation 预留：以后在此 translate→rotate→绘制）。
   const boxLeft = box.centerX - boxWidth / 2
-  const boxTop = centerY - boxHeight / 2
+  const boxTop = box.centerY - boxHeight / 2
 
   if (box.hasBackdrop) {
     roundRectPath(ctx, boxLeft, boxTop, boxWidth, boxHeight, box.fontSizePx * 0.32)
@@ -75,7 +74,7 @@ export function drawTextBox(ctx: CanvasRenderingContext2D, clip: TimelineTextCli
   }
 
   ctx.fillStyle = 'rgb(29, 29, 31)' // --nomi-ink
-  const firstLineY = centerY - textBlockHeight / 2 + lineHeightPx / 2
+  const firstLineY = box.centerY - textBlockHeight / 2 + lineHeightPx / 2
   lines.forEach((line, index) => {
     ctx.fillText(line, box.centerX, firstLineY + index * lineHeightPx)
   })

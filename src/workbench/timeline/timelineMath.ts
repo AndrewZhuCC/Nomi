@@ -54,6 +54,12 @@ function normalizeClip(input: unknown, fallbackType: TimelineTrackType): Timelin
   }
 }
 
+function normalizeUnitInterval(value: unknown): number | null {
+  const next = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(next)) return null
+  return Math.min(1, Math.max(0, next))
+}
+
 function normalizeTextClip(input: unknown): TimelineTextClip | null {
   if (!input || typeof input !== 'object') return null
   const raw = input as Record<string, unknown>
@@ -62,13 +68,23 @@ function normalizeTextClip(input: unknown): TimelineTextClip | null {
   const style: TimelineTextStyle = raw.style === 'title' ? 'title' : 'caption'
   const startFrame = toFiniteNonNegativeInteger(raw.startFrame, 0)
   const endFrame = Math.max(startFrame + 1, toFiniteNonNegativeInteger(raw.endFrame, startFrame + 1))
-  return {
+  const clip: TimelineTextClip = {
     id,
     text: typeof raw.text === 'string' ? raw.text : '',
     style,
     startFrame,
     endFrame,
   }
+  // 通用变换（可选）：旧 clip 无 → 缺省，渲染时回退预设位。
+  const rawPos = raw.position
+  if (rawPos && typeof rawPos === 'object') {
+    const px = normalizeUnitInterval((rawPos as Record<string, unknown>).x)
+    const py = normalizeUnitInterval((rawPos as Record<string, unknown>).y)
+    if (px !== null && py !== null) clip.position = { x: px, y: py }
+  }
+  if (Number.isFinite(Number(raw.scale))) clip.scale = Math.min(5, Math.max(0.2, Number(raw.scale)))
+  if (Number.isFinite(Number(raw.rotation))) clip.rotation = Number(raw.rotation)
+  return clip
 }
 
 function createDefaultTrack(definition: Pick<TimelineTrack, 'id' | 'type' | 'label'>): TimelineTrack {

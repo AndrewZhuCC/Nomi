@@ -1,5 +1,6 @@
 import type { TimelineState, TimelineTextClip, TimelineTextStyle } from './timelineTypes'
 import { DEFAULT_TEXT_CLIP_SECONDS, defaultTextForStyle } from './textLayout'
+import { clampCenter, clampScale, type Vec2 } from './overlayTransform'
 
 function clampInteger(value: number, min: number): number {
   const next = Math.floor(Number(value))
@@ -89,4 +90,21 @@ export function resizeTextClip(
 export function removeTextClip(timeline: TimelineState, id: string): TimelineState {
   const textClips = timeline.textClips.filter((clip) => clip.id !== id)
   return textClips.length === timeline.textClips.length ? timeline : { ...timeline, textClips }
+}
+
+/** 更新文字 clip 的通用变换（位置/缩放）。position 夹在画面内、scale 夹到合法区间。 */
+export function updateTextClipTransform(
+  timeline: TimelineState,
+  id: string,
+  patch: { position?: Vec2; scale?: number },
+): TimelineState {
+  let changed = false
+  const textClips = timeline.textClips.map((clip) => {
+    if (clip.id !== id) return clip
+    const next: TimelineTextClip = { ...clip }
+    if (patch.position) { next.position = clampCenter(patch.position); changed = true }
+    if (patch.scale !== undefined) { next.scale = clampScale(patch.scale); changed = true }
+    return next
+  })
+  return changed ? { ...timeline, textClips } : timeline
 }

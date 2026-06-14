@@ -1,19 +1,19 @@
-import type { TimelineTextStyle } from './timelineTypes'
+import type { TimelineTextClip, TimelineTextStyle } from './timelineTypes'
+import { clampScale, type OverlayTransform, type Vec2 } from './overlayTransform'
 
 /**
  * 文字叠加层的「唯一」布局规范。预览 DOM、导出 PNG、WebM 回退 canvas 三处都消费它，
  * 几何全用「占画布宽/高的比例」表达 → 不同分辨率/不同渲染器下字号位置一致（杜绝漂移）。
+ * 中心锚点：position 即元素中心；style 只给「默认中心 + 基准字号」，拖动/缩放后用 clip 的 transform。
  */
 export type TextLayoutSpec = {
-  /** 字号 = 画布宽 × 此比例 */
+  /** 基准字号 = 画布宽 × 此比例（再乘 scale）*/
   fontSizeFrac: number
-  /** 文本框最大宽 = 画布宽 × 此比例 */
+  /** 文本框最大宽 = 画布宽 × 此比例（再乘 scale）*/
   maxWidthFrac: number
-  /** 垂直锚点：caption 贴底、title 居中 */
-  anchor: 'bottom' | 'center'
-  /** anchor=bottom 时，文本框底边到画布底的距离 = 画布高 × 此比例 */
-  bottomFrac: number
-  /** 是否带半透明底卡（字幕有、标题卡无）*/
+  /** 预设中心（归一化）——caption 下三分之一、title 居中。仅作初始落点，存进 position 后即与手拖无差别。*/
+  defaultCenter: Vec2
+  /** 是否带半透明底卡 */
   hasBackdrop: boolean
   fontWeight: number
   lineHeight: number
@@ -21,39 +21,45 @@ export type TextLayoutSpec = {
 
 export function getTextLayoutSpec(style: TimelineTextStyle): TextLayoutSpec {
   if (style === 'title') {
-    // 标题卡也带底卡（更淡）——保证任意画面背景下都可读；居中大字。
-    return { fontSizeFrac: 0.062, maxWidthFrac: 0.86, anchor: 'center', bottomFrac: 0, hasBackdrop: true, fontWeight: 600, lineHeight: 1.2 }
+    return { fontSizeFrac: 0.062, maxWidthFrac: 0.86, defaultCenter: { x: 0.5, y: 0.5 }, hasBackdrop: true, fontWeight: 600, lineHeight: 1.2 }
   }
-  return { fontSizeFrac: 0.04, maxWidthFrac: 0.82, anchor: 'bottom', bottomFrac: 0.08, hasBackdrop: true, fontWeight: 600, lineHeight: 1.3 }
+  return { fontSizeFrac: 0.04, maxWidthFrac: 0.82, defaultCenter: { x: 0.5, y: 0.86 }, hasBackdrop: true, fontWeight: 600, lineHeight: 1.3 }
 }
 
-/** 解析到具体像素（给定画布宽高）。canvas / 离屏 PNG / DOM 叠加层共用。 */
+/** 解析 clip 的有效变换：position/scale 缺省 → 用 style 预设。rotation 预留默认 0。 */
+export function resolveOverlayTransform(clip: TimelineTextClip): OverlayTransform {
+  const spec = getTextLayoutSpec(clip.style)
+  return {
+    position: clip.position ?? spec.defaultCenter,
+    scale: clampScale(clip.scale ?? 1),
+    rotation: clip.rotation ?? 0,
+  }
+}
+
+/** 解析到具体像素（给定画布宽高）。canvas / 离屏 PNG / DOM 叠加层共用。中心锚点。 */
 export type ResolvedTextBox = {
   fontSizePx: number
   maxWidthPx: number
-  /** 文本框水平居中 → 中心 x */
+  /** 文本框中心（像素）*/
   centerX: number
-  anchor: 'bottom' | 'center'
-  /** anchor=bottom：文本框底边 y；anchor=center：画布中心 y */
-  anchorY: number
-  bottomMarginPx: number
+  centerY: number
+  rotation: number
   hasBackdrop: boolean
   fontWeight: number
   lineHeight: number
 }
 
-export function resolveTextBox(style: TimelineTextStyle, width: number, height: number): ResolvedTextBox {
-  const spec = getTextLayoutSpec(style)
+export function resolveTextBox(clip: TimelineTextClip, width: number, height: number): ResolvedTextBox {
+  const spec = getTextLayoutSpec(clip.style)
+  const t = resolveOverlayTransform(clip)
   const safeWidth = Math.max(1, width)
   const safeHeight = Math.max(1, height)
-  const bottomMarginPx = Math.round(safeHeight * spec.bottomFrac)
   return {
-    fontSizePx: Math.max(11, Math.round(safeWidth * spec.fontSizeFrac)),
-    maxWidthPx: Math.round(safeWidth * spec.maxWidthFrac),
-    centerX: safeWidth / 2,
-    anchor: spec.anchor,
-    anchorY: spec.anchor === 'bottom' ? safeHeight - bottomMarginPx : safeHeight / 2,
-    bottomMarginPx,
+    fontSizePx: Math.max(11, Math.round(safeWidth * spec.fontSizeFrac * t.scale)),
+    maxWidthPx: Math.round(Math.min(safeWidth * 0.96, safeWidth * spec.maxWidthFrac * t.scale)),
+    centerX: t.position.x * safeWidth,
+    centerY: t.position.y * safeHeight,
+    rotation: t.rotation,
     hasBackdrop: spec.hasBackdrop,
     fontWeight: spec.fontWeight,
     lineHeight: spec.lineHeight,

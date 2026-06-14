@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createDefaultTimeline, normalizeTimeline, resolveActiveTextClipsAtFrame, computeTimelineDuration } from './timelineMath'
-import { addTextClip, moveTextClip, removeTextClip, resizeTextClip, updateTextClipText } from './timelineTextEdit'
+import { addTextClip, moveTextClip, removeTextClip, resizeTextClip, updateTextClipText, updateTextClipTransform } from './timelineTextEdit'
+import { resolveTextBox } from './textLayout'
 
 describe('timeline 文字 clip 编辑', () => {
   it('addTextClip 在 playhead 处加默认 3s 文字 clip', () => {
@@ -63,6 +64,41 @@ describe('timeline 文字 clip 编辑', () => {
   it('normalizeTimeline 迁移：旧工程无 textClips → []', () => {
     const legacy = { version: 1, fps: 30, scale: 1, playheadFrame: 0, tracks: [] }
     expect(normalizeTimeline(legacy).textClips).toEqual([])
+  })
+
+  it('updateTextClipTransform 写 position(夹画面内)/scale(夹合法区)', () => {
+    const { timeline, id } = addTextClip(createDefaultTimeline(), 'caption', 0)
+    const moved = updateTextClipTransform(timeline, id, { position: { x: 1.4, y: -0.2 }, scale: 99 })
+    expect(moved.textClips[0].position).toEqual({ x: 1, y: 0 })
+    expect(moved.textClips[0].scale).toBe(5) // SCALE_MAX
+    // 无 patch 返回同引用
+    expect(updateTextClipTransform(timeline, id, {})).toBe(timeline)
+  })
+
+  it('resolveTextBox 默认用 style 预设中心，position 覆盖，scale 放大字号', () => {
+    const { timeline, id } = addTextClip(createDefaultTimeline(), 'caption', 0)
+    const clip = timeline.textClips[0]
+    const base = resolveTextBox(clip, 1000, 1000)
+    expect(base.centerX).toBe(500)        // 预设 x=0.5
+    expect(base.centerY).toBe(860)        // caption 预设 y=0.86
+    const moved = resolveTextBox({ ...clip, position: { x: 0.2, y: 0.3 }, scale: 2 }, 1000, 1000)
+    expect(moved.centerX).toBe(200)
+    expect(moved.centerY).toBe(300)
+    expect(moved.fontSizePx).toBe(base.fontSizePx * 2) // scale 翻倍字号翻倍
+  })
+
+  it('normalizeTimeline 迁移 position/scale（旧 clip 无 → 缺省）', () => {
+    const persisted = {
+      version: 1, fps: 30, scale: 1, playheadFrame: 0, tracks: [],
+      textClips: [
+        { id: 'a', text: '甲', style: 'title', startFrame: 0, endFrame: 30, position: { x: 0.2, y: 0.8 }, scale: 1.5 },
+        { id: 'b', text: '乙', style: 'caption', startFrame: 0, endFrame: 30 }, // 无变换
+      ],
+    }
+    const out = normalizeTimeline(persisted).textClips
+    expect(out.find((c) => c.id === 'a')?.position).toEqual({ x: 0.2, y: 0.8 })
+    expect(out.find((c) => c.id === 'a')?.scale).toBe(1.5)
+    expect(out.find((c) => c.id === 'b')?.position).toBeUndefined()
   })
 
   it('normalizeTimeline 读回并清洗 textClips', () => {

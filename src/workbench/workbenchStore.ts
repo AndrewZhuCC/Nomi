@@ -19,7 +19,9 @@ import {
   removeTextClip,
   resizeTextClip,
   updateTextClipText,
+  updateTextClipTransform,
 } from './timeline/timelineTextEdit'
+import type { Vec2 } from './timeline/overlayTransform'
 import { createDefaultTimeline, normalizeTimeline } from './timeline/timelineMath'
 import type { TimelineClip, TimelineState, TimelineTextStyle, TimelineTrackType } from './timeline/timelineTypes'
 import { createDefaultWorkbenchDocument, normalizeWorkbenchDocument, type CreationDocumentTools, type PreviewAspectRatio, type WorkbenchDocument } from './workbenchTypes'
@@ -146,6 +148,8 @@ type WorkbenchState = {
   resizeTimelineTextClip: (id: string, edge: 'left' | 'right', frame: number, options?: { commit?: boolean }) => void
   removeTimelineTextClip: (id: string) => void
   selectTimelineTextClip: (id: string) => void
+  /** 画面内自由拖动/缩放：position(归一化中心)/scale。拖动中 commit:false 不落盘，松手 commit:true。 */
+  updateTimelineTextClipTransform: (id: string, patch: { position?: Vec2; scale?: number }, options?: { commit?: boolean }) => void
 }
 
 export function isWorkspaceMode(value: unknown): value is WorkspaceMode {
@@ -499,5 +503,16 @@ export const useWorkbenchStore = create<WorkbenchState>()(subscribeWithSelector(
   selectTimelineTextClip: (id) => {
     const next = String(id || '').trim()
     set({ selectedTextClipId: next, selectedTimelineClipIds: [] })
+  },
+  updateTimelineTextClipTransform: (id, patch, options) => {
+    const commit = options?.commit !== false
+    set((state) => {
+      const next = updateTextClipTransform(state.timeline, id, patch)
+      const changed = next !== state.timeline
+      return {
+        timeline: next,
+        persistRevision: commit && changed ? state.persistRevision + 1 : state.persistRevision,
+      }
+    })
   },
 })))

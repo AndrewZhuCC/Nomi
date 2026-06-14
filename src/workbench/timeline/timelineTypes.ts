@@ -33,6 +33,11 @@ export type TimelineTextClip = {
   style: TimelineTextStyle
   startFrame: number
   endFrame: number
+  // 通用变换（content-agnostic，见 overlayTransform.ts）。缺省 → 用 style 预设位/默认值。
+  // 拖动写 position，缩放写 scale，rotation 预留（本期不接把手）。
+  position?: { x: number; y: number } // 归一化中心 0~1
+  scale?: number
+  rotation?: number // 度，预留
 }
 
 export type TimelineState = {

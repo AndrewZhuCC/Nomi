@@ -61,6 +61,10 @@ export const workbenchProjectPayloadSchema = z.object({
       style: z.enum(['caption', 'title']),
       startFrame: z.number().finite(),
       endFrame: z.number().finite(),
+      // 通用变换（可选）：归一化中心 + 缩放 + 旋转(预留)。
+      position: z.object({ x: z.number().finite(), y: z.number().finite() }).optional(),
+      scale: z.number().finite().optional(),
+      rotation: z.number().finite().optional(),
     })).optional().default([]),
   }),
   // Keep project loading tolerant of legacy v0.5 category ids so the
