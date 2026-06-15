@@ -34,6 +34,8 @@ export function getDefaultCategoryForNodeKind(kind: GenerationNodeKind): Builtin
     case 'panorama':
     case 'scene3d':
       return 'scene'
+    case 'audio':
+      return 'audio'
     default:
       return 'shots'
   }

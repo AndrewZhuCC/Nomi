@@ -144,6 +144,22 @@ export const GENERATION_NODE_PLUGINS = defineGenerationNodePlugins([
         promptPlaceholder: "描述这一段视频的镜头、动作和节奏...",
     },
     {
+        // 声音：配音生成（TTS，文→音）/ 转写（Whisper，音→文）/ 上传音频。渲染走 audio-strip（按 kind 强制，
+        // 见 BaseGenerationNode renderKind 分发），生成类挂 composer（模式切换在 NodeGenerationComposer）。
+        kind: "audio",
+        label: "Audio",
+        menuLabel: "声音",
+        component: loadBaseGenerationNode,
+        icon: "audio",
+        defaultTitle: "声音",
+        defaultSize: { width: 420, height: 80 },
+        catalogKind: "audio",
+        executionKind: "audio",
+        quickAdd: true,
+        agentCreatable: true,
+        promptPlaceholder: "输入台词或旁白…",
+    },
+    {
         kind: "shot",
         label: "Shot",
         menuLabel: "镜头",
