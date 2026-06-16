@@ -11,13 +11,20 @@
 
 ## 待做（按优先级/依赖）
 
-### 1. 视频抽帧（首/尾帧）+ 重新支持镜头视频接力 ★核心基建
-→ **详见 [docs/handoff/2026-06-16-video-frame-extraction.md](2026-06-16-video-frame-extraction.md)**
-一并根治：批量那个潜伏 bug、重新接上 shot→shot 视频连贯、喂 Seedance 首尾帧。electron 抽帧 IPC（ffmpeg 现成）+ runner 消费 relayFromVideoUrl + storyboard 重连 first_frame 边。需真实 E2E。
+### 1. 视频抽帧（首/尾帧）+ 镜头视频接力 ✅ 已完成（M-A，push b0df2a7）
+→ 实现见 [docs/plan/2026-06-16-video-frame-relay-and-roles.md](../plan/2026-06-16-video-frame-relay-and-roles.md)
+通用三层正交：抽帧 IPC（`electron/video/extractVideoFrame.ts`）+ 接力帧解析器单一真相源
+（`runner/relayFrameResolver.ts`，唯一消费 relayFromVideoUrl）+ projectId getter。潜伏 batch bug 已根治。
+**注**：storyboard 自动重连 shot→shot **未做且按用户拍板不做**（「自动链删除→保留」，连贯靠共享定妆/场景卡）；
+需要接力时手动连 video→video first_frame 边即真抽帧。
 
-### 2. Seedance 2.0 apimart「完整做完」★用户强调
-→ **详见 [docs/handoff/2026-06-16-seedance-apimart-complete.md](2026-06-16-seedance-apimart-complete.md)**
-剩：**首尾帧 image_with_roles**（构造层组装，最硬）、face/fast-face 变体、seed/return_last_frame 参数、与官方文档逐项对账打钩、真实 E2E。首尾帧的视频源帧 = 上面第 1 项的抽帧。
+### 2. Seedance 2.0 apimart「完整做完」✅ 基本完成（M-C，push 9dddd3f）
+→ 实现见同上 plan。通用 combineSlotsInto 原语 + 首尾帧 image_with_roles + face/fast-face + seed + catalog。
+**剩 return_last_frame**：官方两页都没给响应尾帧字段名 → 待真实 E2E 主进程埋点拿字段名后闭环（见下 M-D）。
+
+### M-D. 真实生成 E2E ⏳ 待 apimart key（A/C 的接入即验证收口）
+apimart Seedance 首尾帧 + 视频接力各跑一条真实生成；主进程埋点抓请求体确认 image_with_roles:[{url,role}] 结构、
+首帧填的是抽出的 nomi-local 帧（非视频 URL）；顺带从响应拿 return_last_frame 尾帧字段名闭环它。烧额度，需 key。
 
 ### 3. ①② 的 Playwright E2E 回归锁
 本轮 ①②（批量不弹模态 / 参考×断边）受工具 + 额度限制**没做交互级真机走查**（只过单测；③④ 真机验过了）。补一个带状态注入的 Playwright E2E（`tests/ux/`），把这两条钉成可复跑回归：

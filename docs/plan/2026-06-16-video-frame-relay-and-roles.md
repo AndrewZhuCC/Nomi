@@ -49,8 +49,13 @@
 
 - **M-A 通用接力帧基建**：抽帧 IPC + 接力帧解析消费 + projectId getter。单测（mock IPC / relay→firstFrame 填充 / 抽帧失败拦下）。手动画布 video→video 边验证。五门 + commit。
 - **M-B storyboard 接力重连**：视频镜头间建 first_frame 边 + dependencyWaves 自动分波串行 + 改 storyboardPlan.test 断言。五门 + commit。
-- **M-C Seedance combine**：通用 combineSlotsInto 原语 + 首尾帧模式 + face/fast-face 变体 + seed/return_last_frame 参数 + catalog body。单测含"假想第二模型"通用性断言。五门 + commit。
-- **M-D 真实 E2E**（烧额度，用户已授权）：apimart Seedance 首尾帧 + 视频接力各跑一条真实生成，主进程埋点抓请求体确认 image_with_roles 结构对、首帧填的是抽出的 nomi-local 帧。
+- **M-C Seedance combine** ✅ **已 push main（9dddd3f）**：通用 combineSlotsInto 原语 + 首尾帧模式 + face/fast-face
+  + seed + catalog image_with_roles。根治 mapping id 撞（idKey）。单测 8（含「假想第二模型」通用性断言）。五门绿。
+- **~~M-B storyboard 自动重连~~ 已取消**：用户拍板「shot→shot 自动链删除 → 保留」（与交接 §2C 冲突，按 R3 以用户为准）。
+  不自动连——多数分镜切镜头，强行首帧接力反而错；连贯靠共享定妆/场景卡。M-A 已让手动 video→video 边真抽帧、根治潜伏 batch bug。
+- **M-D 真实 E2E** ⏳ **待 apimart key**（烧额度，已授权但测试环境需 key）：① 首尾帧真实生成抓请求体确认 image_with_roles
+  结构；② 视频接力确认首帧填的是抽出的 nomi-local 帧；③ 顺带从真实响应拿 return_last_frame 尾帧字段名 → 闭环它。
+- A/C 已完成：typecheck/filesize/tokens/lint/build + 1429 单测 + 零额度 e2e(smoke10/ipc6/cold9) 全绿；R13 画布 build 后健康。
 
 ## 不动什么
 
