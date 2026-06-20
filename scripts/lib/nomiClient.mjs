@@ -71,9 +71,17 @@ function callViaHost(token, method, params) {
       reject(new Error(`headless host 未构建：${hostScript}（先 pnpm run build:electron）`))
       return
     }
+    // 把主 app 身份（package.json name）传给 host：dev spawn 的 electron 默认叫 "Electron"，safeStorage
+    // 解不开主 app 加密的 vendor key（身份不符）。host 收 NOMI_APP_NAME 后 setName 对齐 + 默认 userData 指向真数据。
+    let appName = ''
+    try {
+      appName = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')).name || ''
+    } catch {
+      /* 读不到就不传，host 用继承身份 */
+    }
     const child = spawn(electronBinary, [hostScript, '--cmd', JSON.stringify({ token, method, params })], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env },
+      env: { ...process.env, ...(process.env.NOMI_APP_NAME || appName ? { NOMI_APP_NAME: process.env.NOMI_APP_NAME || appName } : {}) },
     })
     let stdout = ''
     let stderr = ''

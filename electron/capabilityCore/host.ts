@@ -12,6 +12,12 @@ import { dispatch, RpcError } from './dispatcher'
 import { runTask } from '../runtime'
 import { verifyToken } from './security'
 
+// 身份对齐（解密 vendor key 的前提）：CLI 用 `electron host.js` spawn 时 getName 默认 "Electron"，与主 app
+// 加密 safeStorage key 时的身份不符 → 解不开 key（真机实测「API key missing」根因）。spawner 经 NOMI_APP_NAME
+// 传入主 app 身份（= package.json name），setName 对齐 keychain + 默认 userData 才能读到真 catalog 并解密。
+// 必须在 app ready 前调。生产（host 在打包 app 内、getName 已是产品名）spawner 不传此 env → 不覆盖。
+if (process.env.NOMI_APP_NAME) app.setName(process.env.NOMI_APP_NAME)
+
 type HostCommand = { token?: string; method?: string; params?: Record<string, unknown> }
 
 function readCommandFromArgv(): HostCommand {

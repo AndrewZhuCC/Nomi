@@ -59,6 +59,23 @@ function defaultKindForIntent(intent: GenerateIntent, hasReferences: boolean): s
   }
 }
 
+/**
+ * 文本生成的文本落在 result.raw（textTaskRunner 返回 assets:[] + raw=provider 响应，真机实测）。
+ * best-effort 从常见位置抽干净文本：裸字符串 / {text} / OpenAI {choices[0].message.content} / {content}。
+ */
+function extractTextFromRaw(raw: unknown): string {
+  if (typeof raw === 'string') return raw
+  if (raw && typeof raw === 'object') {
+    const record = raw as Record<string, unknown>
+    if (typeof record.text === 'string') return record.text
+    if (typeof record.content === 'string') return record.content
+    const choices = record.choices as Array<{ message?: { content?: unknown } }> | undefined
+    const content = choices?.[0]?.message?.content
+    if (typeof content === 'string') return content
+  }
+  return ''
+}
+
 /** 读取项目的画布快照（normalize 后），坏/缺数据降级为空。 */
 function readProjectSnapshot(record: ProjectRecord): CanvasSnapshot {
   const payload = (record.payload && typeof record.payload === 'object' ? (record.payload as Record<string, unknown>) : {}) as Record<string, unknown>
@@ -213,23 +230,25 @@ export async function generateOnProject(input: GenerateInput, runTaskFn: RunTask
 
   const result = await runTaskFn({ vendor: input.vendor, request })
 
-  // 落结果回节点（首资产 → result，便于 renderer 载入即见）。失败也保存 prompt/节点。
+  // 落结果回节点。图/视频/音频走首资产；文本无资产，文本在 raw（best-effort 抽取）。失败也保存 prompt/节点。
   const primary = (result.assets || [])[0]
+  const text = intent === 'text' ? extractTextFromRaw(result.raw) : (typeof primary?.text === 'string' ? primary.text : '')
+  const hasOutput = Boolean(primary || text)
   const persisted = snapshot.nodes.map((item) =>
     item.id === nodeId
       ? {
           ...item,
           status: result.status === 'succeeded' ? 'success' : result.status === 'failed' ? 'error' : item.status,
-          ...(primary
+          ...(hasOutput
             ? {
                 result: {
                   id: result.id || `result-${nodeId}`,
                   type: intent === 'video' ? 'video' : intent === 'audio' ? 'audio' : intent === 'text' ? 'text' : 'image',
-                  url: primary.url,
-                  thumbnailUrl: primary.thumbnailUrl,
-                  providerUrl: primary.providerUrl,
-                  text: primary.text,
-                  assetId: primary.assetId,
+                  ...(primary?.url ? { url: primary.url } : {}),
+                  ...(primary?.thumbnailUrl ? { thumbnailUrl: primary.thumbnailUrl } : {}),
+                  ...(primary?.providerUrl ? { providerUrl: primary.providerUrl } : {}),
+                  ...(text ? { text } : {}),
+                  ...(primary?.assetId ? { assetId: primary.assetId } : {}),
                   createdAt: Date.now(),
                 },
               }
@@ -239,5 +258,5 @@ export async function generateOnProject(input: GenerateInput, runTaskFn: RunTask
   )
   saveProject(input.projectId, writeProjectSnapshot(record, { ...snapshot, nodes: persisted }))
 
-  return { nodeId, status: result.status || 'unknown', assets: result.assets || [] }
+  return { nodeId, status: result.status || 'unknown', assets: result.assets || [], ...(text ? { text } : {}) }
 }
