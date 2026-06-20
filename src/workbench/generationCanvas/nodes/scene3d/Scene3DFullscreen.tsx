@@ -29,6 +29,7 @@ import { CameraStateRecorder } from './CameraStateRecorder'
 import {
   SCENE3D_ASPECT_OPTIONS,
   SCENE3D_ASPECT_RATIOS,
+  type CaptureApi,
   type Scene3DAspectRatio,
   type Scene3DCamera,
   type Scene3DCaptureResult,
@@ -75,6 +76,7 @@ import {
   eulerToArray,
   vectorAlmostEqual,
   cameraPoseSampleChanged,
+  cameraAimSpherical,
   type CameraPoseSample,
   crowdCount,
   aspectDimensions,
@@ -120,10 +122,6 @@ type Scene3DFullscreenProps = {
   onScreenshot: (capture: Scene3DCaptureResult) => void
 }
 
-type CaptureApi = {
-  captureViewport: () => Scene3DCaptureResult | null
-  captureCamera: (camera: Scene3DCamera) => Scene3DCaptureResult | null
-}
 
 type Scene3DClipboardItem =
   | { type: 'object'; item: Scene3DObject; pasteCount: number }
@@ -1527,12 +1525,6 @@ function CameraPreview({
       </div>
     </div>
   )
-}
-
-function cameraAimSpherical(camera: Scene3DCamera): THREE.Spherical {
-  const direction = vectorFromArray(camera.target).sub(vectorFromArray(camera.position))
-  if (direction.lengthSq() < 0.0001) direction.set(0, -0.2, 1)
-  return new THREE.Spherical().setFromVector3(direction)
 }
 
 export default function Scene3DFullscreen({

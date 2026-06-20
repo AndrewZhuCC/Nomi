@@ -141,6 +141,12 @@ export function editorCameraFromSceneCamera(cameraData: Scene3DCamera): Scene3DS
   }
 }
 
+export function cameraAimSpherical(camera: Scene3DCamera): THREE.Spherical {
+  const direction = vectorFromArray(camera.target).sub(vectorFromArray(camera.position))
+  if (direction.lengthSq() < 0.0001) direction.set(0, -0.2, 1)
+  return new THREE.Spherical().setFromVector3(direction)
+}
+
 export function eulerToArray(value: THREE.Euler): Scene3DVector3 {
   return [
     Number(value.x.toFixed(4)),
