@@ -24,6 +24,7 @@ import {
   plannedNodeSchema,
   storyboardPlanParamsSchema,
   stagingReferenceParamsSchema,
+  cameraMoveParamsSchema,
   type CanvasToolName,
 } from "./canvasTools";
 import {
@@ -298,6 +299,11 @@ function buildCanvasToolsForV2(hooks: AgentChatV2Hooks) {
       "create_staging_reference",
       "Create a 3D staging reference image locking character blocking + poses + camera for a shot (auto-connects to shotClientId as composition_ref). Use when ≥2 characters have a spatial relationship, a specific physical action is needed, or a director-specified camera angle. Not for simple single talking-head shots.",
       stagingReferenceParamsSchema,
+    ),
+    create_camera_move: makeTool(
+      "create_camera_move",
+      "Create a 3D camera-move reference clip locking a shot's camera motion (orbit / push-in / pull-out / crane / track / arc), fed to the shot's VIDEO node as a reference video (or degraded to a camera-move prompt directive on models without a video_ref slot). Use only when a shot has a specific camera-move intent; not for static or talking-head shots. shotClientId must point to the shot's VIDEO node.",
+      cameraMoveParamsSchema,
     ),
     // Silence unused-import warning for canvasNodeKindSchema by re-exporting
     // it through the tool registry shape (it's enforced via plannedNodeSchema).

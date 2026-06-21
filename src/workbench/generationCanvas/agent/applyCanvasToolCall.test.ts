@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // (本测试的 case 不带 modelKey,真实代码路径也不会调它)。
 vi.mock('./availableModels', () => ({ listAvailableModelsForAgent: vi.fn(async () => []) }))
 
-import { applyCanvasToolCall, resetClientIdRegistry, resolveCanvasToolNodeId } from './applyCanvasToolCall'
+import { applyCanvasToolCall, parseCameraMoveSpec, resetClientIdRegistry, resolveCanvasToolNodeId } from './applyCanvasToolCall'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { useWorkbenchStore } from '../../workbenchStore'
 import type { StoryboardPlan } from './storyboardPlan'
@@ -170,5 +170,60 @@ describe('applyCanvasToolCall propose_storyboard_plan', () => {
       applyCanvasToolCall('propose_storyboard_plan', { title: 't', anchors: [{ id: 'x', kind: 'bad' }], shots: [] }),
     ).rejects.toThrow()
     expect(useWorkbenchStore.getState().storyboardPlan).toBeNull()
+  })
+})
+
+// S4 运镜参考解析器：容错提取，非法/缺省由 builder 兜默认（与 parseStagingSpec 同例）。
+describe('parseCameraMoveSpec — 容错解析运镜参数', () => {
+  it('完整参数原样落 spec', () => {
+    expect(
+      parseCameraMoveSpec({ move: 'orbit_left', speed: 'slow', shot: 'wide', subjectPose: 'walk' }),
+    ).toEqual({ move: 'orbit_left', speed: 'slow', shot: 'wide', subjectPose: 'walk' })
+  })
+
+  it('缺 move → 兜 push_in；缺 speed/shot/subjectPose → undefined（builder 兜默认）', () => {
+    expect(parseCameraMoveSpec({})).toEqual({
+      move: 'push_in',
+      speed: undefined,
+      shot: undefined,
+      subjectPose: undefined,
+    })
+  })
+
+  it('空串/非串值按缺省处理，不抛', () => {
+    expect(parseCameraMoveSpec({ move: '   ', speed: 42 as unknown as string })).toEqual({
+      move: 'push_in',
+      speed: undefined,
+      shot: undefined,
+      subjectPose: undefined,
+    })
+  })
+})
+
+// S4 执行分支：建 scene3d 节点 + 打 cameraMoveAutoCapture 标志（targetNodeId/fps/frameCount/move），不渲染。
+describe('applyCanvasToolCall create_camera_move 执行', () => {
+  beforeEach(() => {
+    resetCanvas()
+    resetClientIdRegistry()
+  })
+
+  it('建 scene3d 节点，标志含解析出的真实 targetNodeId + frameCount=duration*12', async () => {
+    const created = (await applyCanvasToolCall('create_canvas_nodes', {
+      nodes: [{ clientId: 'v1', kind: 'video', title: '镜头 1', prompt: 'p' }],
+    })) as { clientIdToNodeId: Record<string, string> }
+    const targetId = created.clientIdToNodeId.v1
+
+    const res = (await applyCanvasToolCall('create_camera_move', {
+      shotClientId: 'v1',
+      move: 'push_in',
+      speed: 'fast', // 3s × 12fps = 36 帧
+    })) as { cameraMoveNodeId: string; targetNodeId: string | null }
+
+    expect(res.targetNodeId).toBe(targetId)
+    const scene3d = useGenerationCanvasStore.getState().nodes.find((n) => n.id === res.cameraMoveNodeId)
+    expect(scene3d?.kind).toBe('scene3d')
+    const flag = scene3d?.meta?.cameraMoveAutoCapture as Record<string, unknown> | undefined
+    expect(flag).toMatchObject({ targetNodeId: targetId, fps: 12, frameCount: 36, move: 'push_in' })
+    expect(scene3d?.meta?.scene3dState).toBeTruthy()
   })
 })

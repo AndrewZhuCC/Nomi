@@ -157,6 +157,36 @@ export const stagingReferenceParamsSchema = z.object({
     .describe("Optional background crowd grid behind the main characters."),
 });
 
+// ── 运镜参考 schema（create_camera_move 的参数；镜像渲染层 cameraMoveBuilder 的 CameraMoveSpec，
+// 进程隔离故两处各一份，与 staging 同例。move/speed/shot 枚举=S1 cameraMoveVocab 词表）。──
+export const cameraMoveParamsSchema = z.object({
+  shotClientId: z
+    .string()
+    .describe(
+      "clientId (from this turn's create_canvas_nodes) or real node id of the shot's VIDEO node this camera move drives. The rendered camera-move clip auto-attaches to it as a video reference (the model copies the camera path, not the gray content).",
+    ),
+  move: z
+    .enum([
+      "orbit_left", "orbit_right", "push_in", "pull_out", "crane_up", "crane_down",
+      "track_left", "track_right", "arc_left", "arc_right",
+    ])
+    .describe(
+      "The single dominant camera move for this shot. orbit_left/right = camera circles the subject (~300°); push_in/pull_out = dolly toward/away; crane_up/down = boom up/down; track_left/right = lateral tracking; arc_left/right = short arc (~90°).",
+    ),
+  speed: z
+    .enum(["slow", "medium", "fast"])
+    .optional()
+    .describe("Move speed → clip duration (slow≈8s, medium≈5s, fast≈3s). Default medium."),
+  shot: z
+    .enum(["wide", "medium", "close"])
+    .optional()
+    .describe("Framing of the move (wide / medium / close). Default medium."),
+  subjectPose: z
+    .string()
+    .optional()
+    .describe("Optional body-pose preset id for the subject mannequin the camera moves around (e.g. standing / sit / walk). Default standing."),
+});
+
 export const canvasToolNames = [
   "read_canvas_state",
   "propose_storyboard_plan",
@@ -167,6 +197,7 @@ export const canvasToolNames = [
   "run_generation_batch",
   "arrange_storyboard_to_timeline",
   "create_staging_reference",
+  "create_camera_move",
 ] as const;
 export type CanvasToolName = (typeof canvasToolNames)[number];
 
@@ -254,6 +285,15 @@ export const canvasTools = {
       "Framing tips so the blocking READS: if the director didn't specify a camera, OMIT the camera field — the system auto-picks a readable angle per layout (circle→high, line→side, behind→3/4 high, facing→3/4). For 'who surrounds whom' use layout=circle (best read from high/overhead). For two characters confronting/addressing each other use layout=facing (they orient toward each other). The 'point'/'wave' poses show a pointing/raised-arm gesture but don't precisely aim at a named target — use them for 'a character is gesturing', not 'A points exactly at B'. Pick the layout that matches the described spatial relationship; only override the camera when the director named one.\n" +
       "shotClientId MUST point to the shot's KEYFRAME IMAGE node (the photoreal first-frame that seeds image-to-video), NOT the video node — video models have no composition slot, so staging only locks blocking when it guides the keyframe image (the video then inherits that first frame). The system renders the keyframe photorealistically from the staging composition (it does not copy the gray mannequins). For an image-first storyboard, that means the shot's image/keyframe node.",
     parameters: stagingReferenceParamsSchema,
+  }),
+  // 运镜参考：组装 3D 相机轨迹场景离屏渲一段运镜小片 → 喂目标镜头视频节点的参考视频槽(Seedance 2.0
+  // 全能参考)或降级成结构化运镜 prompt，锁住视频模型最易崩的「镜头怎么运动」。零扣费(只出灰模小片)。
+  create_camera_move: tool({
+    description:
+      "Create a 3D camera-move reference clip that LOCKS the camera motion of a shot (orbit / push-in / pull-out / crane / track / arc) — so the video model follows the intended camera path instead of guessing. Use it ONLY when a shot has a SPECIFIC camera-move intent the director called out (e.g. '镜头绕着她转一圈推近', 'pull out to reveal'). Do NOT use it for a static / locked-off shot, or a simple talking-head. One call per shot.\n" +
+      "Pick the SINGLE dominant move that matches the intent; the system renders a short gray-mannequin clip of exactly that camera path and feeds it as a video reference to the shot's video node. On models with a reference-video slot (e.g. Seedance 2.0 全能参考) the model copies ONLY the camera movement (content stays driven by the character refs + prompt); on models without one it degrades to a structured camera-move prompt directive.\n" +
+      "shotClientId MUST point to the shot's VIDEO node (the node that actually generates the clip) — not its keyframe image, and not a text/shot note. For an image-first storyboard that is the shot's video node downstream of the keyframe.",
+    parameters: cameraMoveParamsSchema,
   }),
 } as const;
 

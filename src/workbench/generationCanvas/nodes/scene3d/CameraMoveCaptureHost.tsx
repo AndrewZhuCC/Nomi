@@ -11,11 +11,15 @@ import { normalizeScene3DState } from './scene3dSerializer'
 import { persistCameraMoveVideo } from './cameraMoveVideo'
 import { Scene3DTrajectoryCapture, type CameraMoveCaptureResult } from './Scene3DTrajectoryCapture'
 import type { GenerationCanvasNode } from '../../model/generationCanvasTypes'
+import { archetypeForNode, findVideoRefMode } from '../../agent/referenceEdgeCapability'
+import { applyArchetypeModeSwitch, currentArchetypeMode, readArchetypeArray } from '../controls/archetypeMeta'
+import { CAMERA_MOVE_LABEL, CAMERA_MOVE_DESC, type CameraMove } from './cameraMoveVocab'
 
 type CameraMoveAutoCapture = {
   targetNodeId?: string
   frameCount?: number
   fps?: number
+  move?: CameraMove
 }
 
 // S2 产物（写回 scene3d 节点 meta，供 S3 喂入消费）。
@@ -49,6 +53,46 @@ function clampFps(value: number | undefined): number {
   return Math.min(60, Math.max(1, n))
 }
 
+/** 运镜 prompt 地板（通用，全供应商可用）：人话点出该镜的运镜，作为不吃视频参考时的降级。 */
+function cameraMoveDirective(move: CameraMove | undefined): string {
+  if (!move) return ''
+  return `\n镜头运动：${CAMERA_MOVE_LABEL[move]}（${CAMERA_MOVE_DESC[move]}）`
+}
+
+/**
+ * S3 喂入：把运镜小片 mp4 喂给目标镜头视频节点。
+ * - 目标模型有 video_ref 槽（如 Seedance 2.0 全能参考）→ 切到该模式 + meta.referenceVideoUrls 追加 mp4 +
+ *   prompt 追加「参考视频运镜」指令（模型无关，引用视频，只迁运镜不迁内容）。
+ * - 无 video_ref 槽 → 降级：只追加结构化运镜 prompt 地板（CAMERA_MOVE_LABEL/DESC），并标注跳过视频参考。
+ *   （吃首尾帧的供应商的完整首尾帧降级是后续切片，这里先做 prompt 地板。）
+ */
+function attachCameraMoveToTarget(targetNodeId: string, mp4Url: string, move: CameraMove | undefined): void {
+  const store = useGenerationCanvasStore.getState()
+  const target = store.nodes.find((node) => node.id === targetNodeId)
+  if (!target) return
+  const meta = { ...(target.meta || {}) } as Record<string, unknown>
+  const archetype = archetypeForNode(target)
+  const videoRef = findVideoRefMode(archetype)
+  if (archetype && videoRef) {
+    // 切到含 video_ref 的模式（已在该模式则 applyArchetypeModeSwitch 幂等）。
+    let nextMeta = applyArchetypeModeSwitch(meta, archetype, videoRef.modeId)
+    const existing = readArchetypeArray(nextMeta, videoRef.metaKey)
+    const referenceVideoUrls = existing.includes(mp4Url) ? existing : [...existing, mp4Url]
+    nextMeta = { ...nextMeta, [videoRef.metaKey]: referenceVideoUrls }
+    const directive = `\n@Video1 跟随这段参考视频的运镜（只参考镜头运动，画面内容由角色参考与文字决定）。`
+    const basePrompt = typeof target.prompt === 'string' ? target.prompt : ''
+    const prompt = basePrompt.includes('@Video1') ? basePrompt : `${basePrompt}${directive}`
+    store.updateNode(targetNodeId, { meta: nextMeta, prompt })
+    return
+  }
+  // 降级：无视频参考槽 → 只补结构化运镜 prompt 地板（保留模型不变）。
+  const directive = cameraMoveDirective(move)
+  if (!directive) return
+  const basePrompt = typeof target.prompt === 'string' ? target.prompt : ''
+  const prompt = basePrompt.includes('镜头运动：') ? basePrompt : `${basePrompt}${directive}`
+  store.updateNode(targetNodeId, { prompt })
+}
+
 export function CameraMoveCaptureHost(): JSX.Element | null {
   const pendingNode = useGenerationCanvasStore((state) =>
     state.nodes.find((node) => node.kind === 'scene3d' && readCameraMove(node) !== null) ?? null,
@@ -78,7 +122,7 @@ export function CameraMoveCaptureHost(): JSX.Element | null {
           targetNodeId: config?.targetNodeId,
           createdAt: Date.now(),
         }
-        // S2 接缝：把运镜小片结果写回 scene3d 节点 meta，S3 据此喂入目标镜头 referenceVideoUrls。
+        // S2 接缝：把运镜小片结果写回 scene3d 节点 meta（产物留痕，便于复用/调试）。
         const current = useGenerationCanvasStore.getState().nodes.find((candidate) => candidate.id === nodeId)
         store.updateNode(nodeId, {
           meta: {
@@ -86,6 +130,10 @@ export function CameraMoveCaptureHost(): JSX.Element | null {
             cameraMoveVideo: videoResult,
           },
         })
+        // S3 喂入：把 mp4 喂给目标镜头视频节点（有 video_ref 槽则切模式+填参考视频，否则降级 prompt 地板）。
+        if (config?.targetNodeId) {
+          attachCameraMoveToTarget(config.targetNodeId, persisted.url, config.move)
+        }
       } finally {
         clearFlag()
         processingRef.current = null

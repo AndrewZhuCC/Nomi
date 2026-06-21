@@ -13,6 +13,8 @@ import { mintSpendGrant } from '../../api/taskApi'
 import { arrangeStoryboardToTimeline } from './sendStoryboardToTimeline'
 import { parseStoryboardPlan } from './storyboardPlan'
 import { buildStagingScene, type StagingSpec, type StagingCharacterSpec } from '../nodes/scene3d/stagingBuilder'
+import { buildCameraMoveScene, type CameraMoveSpec } from '../nodes/scene3d/cameraMoveBuilder'
+import { CAMERA_SPEED_DURATION, CAMERA_MOVE_LABEL, type CameraSpeed } from '../nodes/scene3d/cameraMoveVocab'
 import { useWorkbenchStore } from '../../workbenchStore'
 
 // 批量创建节点的布局由渲染层 derive，而不是信任 LLM 发来的像素坐标。
@@ -111,6 +113,18 @@ function parseStagingSpec(record: Record<string, unknown>): StagingSpec {
       crowdRaw && typeof crowdRaw.rows === 'number' && typeof crowdRaw.columns === 'number'
         ? { rows: crowdRaw.rows, columns: crowdRaw.columns }
         : undefined,
+  }
+}
+
+/** create_camera_move 的参数 → CameraMoveSpec（容错提取；非法枚举值由 builder 兜默认）。
+ *  导出供单测；进程隔离故不复用后端 Zod（与 parseStagingSpec 同例）。 */
+export function parseCameraMoveSpec(record: Record<string, unknown>): CameraMoveSpec {
+  const str = (value: unknown): string | undefined => (typeof value === 'string' && value.trim() ? value.trim() : undefined)
+  return {
+    move: (str(record.move) ?? 'push_in') as CameraMoveSpec['move'],
+    speed: str(record.speed) as CameraMoveSpec['speed'],
+    shot: str(record.shot) as CameraMoveSpec['shot'],
+    subjectPose: str(record.subjectPose),
   }
 }
 
@@ -260,6 +274,43 @@ export async function applyCanvasToolCall(toolName: string, args: unknown, gestu
       stagingNodeId,
       targetNodeId: targetNodeId ?? null,
       message: `已创建站位参考（${spec.characters.length} 角色 · ${spec.layout ?? '自动'} 站位 · ${cam.angle ?? 'three-quarter'}/${cam.height ?? 'eye'}/${cam.shot ?? 'medium'}）。正在离屏渲染出图${targetNodeId ? '并连到镜头作 composition_ref' : ''}。`,
+    }
+  }
+
+  if (toolName === 'create_camera_move') {
+    // 运镜参考:词汇 spec → 含相机轨迹的 3D 场景 → 建 scene3d 节点(带 cameraMoveAutoCapture)。
+    // 节点挂载时常驻 Host(CameraMoveCaptureHost)离屏沿轨迹采帧拼 mp4 + 喂目标镜头视频参考(S3)。
+    // 这里只建节点 + 打标志,不渲(S2 Host 异步出片),与 staging 执行结构对称。
+    const spec = parseCameraMoveSpec(record)
+    const state = buildCameraMoveScene(spec)
+    const rawShot = typeof record.shotClientId === 'string' ? record.shotClientId.trim() : ''
+    const targetNodeId = rawShot ? resolveNodeId(rawShot) : undefined
+    const speed: CameraSpeed = spec.speed ?? 'medium'
+    const fps = 12
+    const frameCount = Math.round(CAMERA_SPEED_DURATION[speed] * fps)
+    const existing = generationCanvasTools.read_canvas().nodes
+    const position = layoutPlannedNodes(['image'], existing)[0]
+    const created = inCtx(() =>
+      generationCanvasTools.create_nodes([
+        {
+          kind: 'scene3d',
+          categoryId: getDefaultCategoryForNodeKind('scene3d'),
+          title: '运镜参考',
+          prompt: '',
+          position,
+          meta: {
+            scene3dState: state,
+            // 标志带上 move(供 S3 Host 拼运镜 prompt directive 的人话/降级floor;不必从 3D 场景反推)。
+            cameraMoveAutoCapture: { ...(targetNodeId ? { targetNodeId } : {}), fps, frameCount, move: spec.move },
+          },
+        },
+      ]),
+    )
+    const cameraMoveNodeId = created[0]?.id ?? null
+    return {
+      cameraMoveNodeId,
+      targetNodeId: targetNodeId ?? null,
+      message: `已创建运镜参考（${CAMERA_MOVE_LABEL[spec.move]} · ${spec.shot ?? 'medium'} · ${speed} ≈${CAMERA_SPEED_DURATION[speed]}s）。正在离屏渲染运镜小片${targetNodeId ? '并喂给镜头作运镜参考视频' : ''}。`,
     }
   }
 
