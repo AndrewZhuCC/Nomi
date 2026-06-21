@@ -1,6 +1,12 @@
 # 预览区内部手感改造方案
 
-> 日期：2026-06-21 · 状态：**v2 已按 5 画像用户测裁剪**。AI 原生粗剪（原地重生成 / 真实缩略图）已**移交** `2026-06-21-canvas-preview-linkage.md`（桥方案 v3）；本文只管「预览区内部手感补齐」。
+> 日期：2026-06-21 · 状态：**实现中**。P2(音量/全屏/逐帧) + trim 帧气泡已 push main(d2822df/4acc04c);redo 暂缓(见下);scrub 待真机验。AI 原生粗剪（原地重生成 / 真实缩略图）已**移交** `2026-06-21-canvas-preview-linkage.md`（桥方案 v3）；本文只管「预览区内部手感补齐」。
+>
+> **实现进度（2026-06-21）**：
+> - ✅ P2 播放器：音量/静音 + 全屏 + 逐帧 ⏮⏭（TimelinePreview，五门绿）。
+> - ✅ trim 帧气泡：拖边裁剪浮「Δ帧·时长」（snap-tag 暖橙，TimelineClip，五门绿）。
+> - ⏳ redo 重做：**暂缓**——需在 workbenchStore 约 8 处 push 撤销栈的 set() 各加「清空 redo 栈」(否则新编辑后 redo 回放陈旧态=新 bug),多点改动 + 并行会话占用同文件风险高;留作单独小心切片。
+> - ⏳ scrub 91ms：先真机 probe-latency 实测确认是否真存在,再决定修不修(未做)。
 > 真相源：本文件。代码地图见对话；对标基线 2026 实搜（非记忆）。
 > 关联：`docs/audit/2026-06-19-clip-timeline-walkthrough.md`、`docs/audit/2026-06-20-experience-feel.md`、记忆 [[preview-roughcut-canvas-bridge-plan]]。
 

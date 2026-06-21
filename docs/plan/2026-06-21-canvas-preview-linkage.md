@@ -1,6 +1,13 @@
 # 画布 ↔ 预览 联动：两个桥动作（不加第二条轨）
 
-> 日期：2026-06-21 · 状态：**v3 定稿待开工**。模型经 2 轮 5 画像用户测 + 6 角色评审收敛：**砍掉「画布第二条片轨」，只加两个桥动作 + 真实缩略图。** 决策史见 §7。
+> 日期：2026-06-21 · 状态：**实现中**。C0/C1/C2 已 push main(2e6b2b5/b170ac7/4acc04c);C3 真实缩略图待做。模型经 2 轮 5 画像用户测 + 6 角色评审收敛：**砍掉「画布第二条片轨」，只加两个桥动作 + 真实缩略图。** 决策史见 §7。
+>
+> **实现进度（2026-06-21）**：
+> - ✅ C0 地基：in-place 重生成(`regenerateNodeInPlace`,不 duplicate)+ clip 回填闸(`reconcileTimelineForUpdatedNodes`)+ URL 口径(providerUrl 优先,保留本地 scheme)+ trim 越界夹取 + 防重叠。纯函数单测 12 例。五门绿。
+> - ✅ C1 就地重生成 UI：时间轴选中单媒体 clip → 工具栏「重生成」(IconSparkles/accent)。
+> - ✅ C2 一键拼片 UI：TimelinePanel 工具栏「AI 拼片」(IconWand)复用 `arrangeStoryboardToTimeline`(此前无 UI 入口)。
+> - ⏳ C3 真实帧缩略图：未做(需先核准确「假缩略图」来源 + 抽帧缓存/失效设计,最重)。
+> - ⚠️ 真机 R13:新控件五门绿;本轮集中真机走查被隔离测试环境软渲染下 studio 窗口偶发崩挡住(非代码缺陷,本会话早先同驱动能进预览)。待正常 GPU 实例眼过 + 就地重生成端到端真生成验。
 > 真相源：本文件（v3）。配套：`2026-06-21-preview-rough-cut-overhaul.md`（预览区内部手感，需按 §6 同步裁剪）。
 > 关联记忆：`connection-reference-bugs`、`reconcile-edge-drop-and-card-redesign`、`agent-arrange-storyboard-to-timeline`、`url-priority-inconsistency-ref-lost`、`canvas-tidy-layout`。
 
