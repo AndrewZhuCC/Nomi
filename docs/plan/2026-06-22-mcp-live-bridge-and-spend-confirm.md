@@ -95,3 +95,19 @@
 4. ✅ 不死等 + 诚实：generate 失败返回干净错误（`Model is not enabled` 透传成 UI toast），不无限挂；忽略/未确认 → 节点 `hasResult:false`（**未花额度**）。
 
 **已知非阻断**：Playwright 多窗口驱动在并发 RPC 下会丢窗口句柄（`errors.log` 无 pageerror/crash，纯 harness 现象，非产品 bug）；真实用户单窗口点击不受影响。
+
+## 10. P5：Nomi 关着时——在 Claude 里确认付费（2026-06-22 追加，用户提出）
+
+用户追问「Nomi 没开怎么办」。搭建类操作（加节点/连线/改词/读）关着照常走 headless host 写盘，下次打开即见——无需确认。但**要花钱的生成**关着时无应用内卡可弹。
+
+方案（查证 MCP 规范 2025-06-18 + Claude Code 文档实证,非凭记忆 R5）：用 **MCP elicitation**——MCP server 让客户端（Claude Code）在**用户这一侧弹确认对话框**，真人答完回传。关键：**模型自己无法应答 elicitation**（只有真人/用户自配 Hook 能答），故付费铁律「真人确认才授权」不破。规范禁止用它要密码 → 是「确认花费」不是「输密码」。Claude Code 2.1.76+ 支持（本机 2.1.177 实测过）。
+
+实现（`scripts/nomi-mcp.mjs` 手搓双向 JSON-RPC + `scripts/lib/nomiClient.mjs`）：
+- initialize 捕获 client `capabilities.elicitation`；加「服务端→客户端请求」机制（发 `elicitation/create` + 按 id 路由响应 + 超时兜底）。
+- `nomi_generate` 且 `readLiveInstance()` 为 null（app 关着）→ 弹 elicitation「即将用 X 生成…，确认?」：accept → 以本次调用 `spawnEnv: {NOMI_LOOP_SPEND_OK:'1'}` 授权 headless host 铸令牌 → 生成；decline/cancel/超时 → 回「已取消，未生成未花费」；客户端不支持 → 回可操作错误「打开 Nomi 再生成」。
+- app 开着（A 模式）不在此弹——由应用内确认卡处理（用户人在 Nomi 边上）。
+- `invoke(method, params, {spawnEnv})` per-call 注入 host env，不改全局 `process.env`（防并发串台）。
+
+确认闸全景：**app 开 → 应用内卡；app 关 → Claude 里 elicitation；都不可由模型自我授权，超时/取消均干净返回不死等不偷花。**
+
+验证：`electron/capabilityCore/nomiMcpElicitation.test.ts`（spawn 真 MCP server 走 stdio 握手）——支持 elicitation 时 generate 弹 `elicitation/create`(含「Nomi 未打开」+模型) → decline → 「已取消」拦截；不支持时 → 可操作错误。decline/不支持两路不触发真生成。

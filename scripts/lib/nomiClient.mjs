@@ -78,7 +78,7 @@ async function callViaRpc(instance, token, method, params) {
   return body.result
 }
 
-function callViaHost(token, method, params) {
+function callViaHost(token, method, params, spawnEnv) {
   return new Promise((resolve, reject) => {
     let electronBinary
     try {
@@ -102,7 +102,9 @@ function callViaHost(token, method, params) {
     }
     const child = spawn(electronBinary, [hostScript, '--cmd', JSON.stringify({ token, method, params })], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, ...(process.env.NOMI_APP_NAME || appName ? { NOMI_APP_NAME: process.env.NOMI_APP_NAME || appName } : {}) },
+      // spawnEnv：调用方按本次调用注入的环境（如付费确认通过后传 NOMI_LOOP_SPEND_OK=1 给本次 host），
+      // per-call 注入避免改 process.env 全局态在并发调用间串台。
+      env: { ...process.env, ...(process.env.NOMI_APP_NAME || appName ? { NOMI_APP_NAME: process.env.NOMI_APP_NAME || appName } : {}), ...(spawnEnv || {}) },
     })
     let stdout = ''
     let stderr = ''
@@ -143,11 +145,14 @@ function callViaHost(token, method, params) {
   })
 }
 
-/** 调一次能力核方法：app 开着→RPC，关着→headless host。无 token 抛清晰错误。 */
-export async function invoke(method, params) {
+/**
+ * 调一次能力核方法：app 开着→RPC，关着→headless host。无 token 抛清晰错误。
+ * options.spawnEnv：仅 B 模式（host）生效，按本次调用注入环境（如付费确认通过后授权本次生成）。
+ */
+export async function invoke(method, params, options = {}) {
   const token = readToken()
   if (!token) throw new Error('未找到 token（先启动一次 Nomi 生成 token，路径 ~/.nomi/capability-core/token）')
   const instance = readLiveInstance()
   if (instance) return callViaRpc(instance, token, method, params)
-  return callViaHost(token, method, params)
+  return callViaHost(token, method, params, options.spawnEnv)
 }
