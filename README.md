@@ -5,9 +5,9 @@
 <h1 align="center">Nomi</h1>
 
 <p align="center">
-  <strong>说出你想拍的，AI 帮你拆镜头、生成、剪成片。</strong><br />
-  开源、本地优先、双击即用的 AI 视频创作工作台。<br />
-  <sub>Open-source, local-first desktop app for AI video creation — script → storyboard → images &amp; video → timeline → export.</sub>
+  <strong>把你脑子里的画面，精确传达给 AI。</strong><br />
+  本地优先、开源的 AI 导演工作台——3D 摆构图、定妆锁身份、运镜控节奏，从一句想法到一条成片，都在同一处。<br />
+  <sub>Open-source, local-first AI director's workspace — compose in 3D, lock character identity, direct camera moves; script → storyboard → images &amp; video → timeline → export.</sub>
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@
 
 <p align="center">
   <a href="https://github.com/aqm857886159/Nomi/stargazers"><img src="https://img.shields.io/badge/GitHub-%E2%AD%90%20Star-2563eb?logo=github&logoColor=2563eb&labelColor=f1f5f9" alt="Star on GitHub" /></a>
-  <a href="https://github.com/aqm857886159/Nomi/releases/latest"><img src="https://img.shields.io/badge/release-v0.11.1-2563eb?labelColor=f1f5f9" alt="Latest release" /></a>
+  <a href="https://github.com/aqm857886159/Nomi/releases/latest"><img src="https://img.shields.io/badge/release-v0.12.0-2563eb?labelColor=f1f5f9" alt="Latest release" /></a>
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-2563eb?labelColor=f1f5f9" alt="Platform" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-2563eb?labelColor=f1f5f9" alt="License" /></a>
 </p>
@@ -52,7 +52,9 @@
 
 ## 🎬 这是什么
 
-Nomi 把**写故事 → 拆镜头 → 生图 → 生视频 → 剪辑成片**连成一条流水线。你用大白话描述想拍什么，AI 当你的副导演把整条线跑下来——不用在 ChatGPT / 即梦 / 剪映之间来回搬素材。
+**「我知道我想要什么，但 AI 老是理解错。」** Nomi 就是来解决这件事的。
+
+你用大白话描述想拍什么，AI 当你的副导演，把**写故事 → 拆镜头 → 生图 → 生视频 → 剪辑成片**整条线跑下来。但 Nomi 真正的不同，是给你一套**把意图精确喂给模型**的工具：在 3D 里摆好构图和机位、给角色定妆锁住身份、用轨迹控制运镜——这些「文字说不清」的东西直接搭出来当参考，而不是和模型来回猜。
 
 ```
   故事     →     拆镜头      →     画布生成      →    时间轴    →    成片
@@ -60,14 +62,15 @@ Nomi 把**写故事 → 拆镜头 → 生图 → 生视频 → 剪辑成片**连
             (镜头/角色/提示词)   跨节点复用素材     拖播放头预览
 ```
 
-它跟「网页版生成器」最大的不同：**一个完整、本地、可掌控的创作台**——剧本、画布、3D 导演台、时间轴在一处串起来，素材自动流转，项目和文件都在你自己电脑上。
+它跟「网页版生成器」最大的不同：**一个完整、本地、可掌控的导演工作台**——不用在 ChatGPT / 即梦 / 剪映之间来回搬素材，剧本、画布、3D 导演台、时间轴在一处串起来，素材自动流转，项目和文件都在你自己电脑上。
 
 ---
 
 ## ✨ 它能做什么
 
 - 🤖 **AI 拆镜头 + 排片** — 写完故事点一下，AI 拆成一份**可改的分镜方案**（镜头 / 角色 / 提示词逐项可编辑）；你确认后自动铺到画布、规划「角色定妆 → 关键帧 → 视频」的生成顺序，还能按镜序排上时间轴。跨次打开它也记得这个项目聊过什么。
-- 🎬 **3D 导演台** — 在 3D 场景里摆角色姿势、架机位、设画幅，截取机位画面当生成参考；也能让 AI 按你的描述自动搭好站位再出参考图。**文字说不清的构图，直接「搭」出来**，锁住跨镜头的空间关系。（运镜轨迹能力正在接入。）
+- 🎬 **3D 导演台 + AI 运镜** — 在 3D 场景里摆角色姿势、架机位、设画幅，截机位画面当参考；也能让 AI 按你的描述自动搭好站位。**文字说不清的构图，直接「搭」出来**，锁住跨镜头的空间关系。再用一句话描述运镜，AI 沿相机轨迹渲一段运镜小片喂给视频模型，把镜头运动复刻到成片上。
+- 🔗 **一键接入 Claude Code / Codex / Cursor** — Nomi 的创作能力抽成了一个**无头能力核**（MCP）；在「模型接入」面板一键写好接入，让编程助手用对话直接指挥 Nomi 建项目、加节点、连参考、触发生成——Nomi 里所见即所得。
 - 🔑 **一个 key、十几个模型全通** — 「模型接入」填一个 key（APIMart / kie），视频 **Sora 2 / Veo 3.1 / 可灵 / Seedance / Wan / Hailuo**、图像 **Seedream / Nano Banana / GPT Image / Qwen / Imagen** 等预置模型立即可用，**文生 / 图生 / 首尾帧补间 / 多图参考**模式齐全，同款模型的**标准 / 快速 / Pro 变体**一处切换；也可自定义接入任意中转站。
 - 🎭 **项目级资产锁一致性** — 角色（多视角参考图）、分镜、风格沉淀成可复用资产，减少多片段里的「脸漂移、风格跑偏」。
 - ✍️ **提示词库 + AI 优化** — 内置起步提示词直接送上画布；写得糙的提示词一键 AI 优化，改动**高亮可对比、确认再应用**，不黑箱。
@@ -77,13 +80,17 @@ Nomi 把**写故事 → 拆镜头 → 生图 → 生视频 → 剪辑成片**连
 
 ## 📸 看一眼
 
+**Mura 画布** — 角色定妆 / 场景 / 镜头分层，并行生成、跨节点复用参考，下方就是吸附剪辑的镜头时间轴
+
+<img src="marketing/assets/screen-canvas.png" alt="Mura 画布" width="100%" />
+
+**3D 导演台** — 摆人偶姿势、架机位、设画幅，截机位画面当生成参考，锁住跨镜头的空间关系
+
+<img src="marketing/assets/screen-3d.png" alt="3D 导演台" width="100%" />
+
 **创作区** — 写故事 / 文案，右侧 AI 助手帮你拆镜头、立角色卡
 
 <img src="marketing/assets/screen-script.png" alt="创作区" width="100%" />
-
-**Mura 画布** — 角色 / 场景 / 镜头 / 素材分层，并行生成、跨节点复用
-
-<img src="marketing/assets/screen-canvas.png" alt="Mura 画布" width="100%" />
 
 ---
 
