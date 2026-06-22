@@ -257,9 +257,13 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
       return
     }
     // 对话驱动（删固定 chip，用户拍板 2026-06-13）：自然语言意图 → 甩给画布 agent。
-    // 但手动锁定了 active skill（如「AI 写技能」）时跳过意图路由——否则含「分镜/镜头」等词的输入
-    // 会被劫持到拆镜头流程，盖过用户明确选的技能。锁定 = 用户已明确意图，直走那个 skill。
-    const intent = skillSelRef.current.activeSkill ? null : routeCreationIntent(userRequest)
+    // 跳过意图路由的两种「用户已明确选了路」的情形（B1 分工讲清，2026-06-22）：
+    //  ① 锁定了 active skill（如「AI 写技能」）；
+    //  ② 选了「写分镜」模式 = 明确要在文稿里写**文字分镜稿**，别再劫持到「拆镜头→画布」规划师
+    //     （规划师是结构化落画布路径；默认模式下说「拆镜头/分镜」才走它）。
+    // 否则含「分镜/镜头」的输入会盖过用户明确选的模式/技能（这正是双路互劫的根因）。
+    const skipIntentRouting = skillSelRef.current.activeSkill || skillSelRef.current.activeMode.id === 'storyboard'
+    const intent = skipIntentRouting ? null : routeCreationIntent(userRequest)
     if (intent === 'storyboard') {
       launchStoryboardPlanning(userRequest || '🎬 拆镜头')
       return
