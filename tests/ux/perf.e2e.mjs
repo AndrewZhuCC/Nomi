@@ -39,7 +39,11 @@ const PROBE = `(() => {
   return 'installed';
 })()`;
 
-const app = await electron.launch({ executablePath: require("electron"), args: ["."], cwd: repoRoot, env: { ...process.env } });
+// 隔离启动（多会话/多 worktree 并存时避免抢默认 userData 单实例锁）：设 NOMI_PERF_USER_DATA
+// + NOMI_PROJECTS_DIR(env 透传)即用独立实例 + 独立项目库。不设则用默认(单会话便利)。
+const isoUserData = process.env.NOMI_PERF_USER_DATA;
+const launchArgs = isoUserData ? [".", `--user-data-dir=${isoUserData}`] : ["."];
+const app = await electron.launch({ executablePath: require("electron"), args: launchArgs, cwd: repoRoot, env: { ...process.env } });
 let win = await app.firstWindow();
 const live = () => app.windows().filter((w) => !w.isClosed());
 const getWin = () => (win && !win.isClosed() ? win : (win = live().find((w) => /studio|library|#\//.test(w.url())) || live().slice(-1)[0] || win));
