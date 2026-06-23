@@ -47,7 +47,6 @@ export function SceneContent({
   onCameraPatch,
   onEditorCameraDraft,
   onEditorCameraCommit,
-  onEditorCameraTargetChange,
   onWheelNavigation,
   onTransformInteractionStart,
   onTransformInteractionEnd,
@@ -84,7 +83,6 @@ export function SceneContent({
   onCameraPatch: (id: string, patch: Partial<Scene3DCamera>) => void
   onEditorCameraDraft: (cameraState: Scene3DState['editorCamera']) => void
   onEditorCameraCommit: (cameraState: Scene3DState['editorCamera']) => void
-  onEditorCameraTargetChange: (target: Scene3DVector3) => void
   onWheelNavigation: (cameraState: Scene3DState['editorCamera']) => void
   onTransformInteractionStart: () => void
   onTransformInteractionEnd: () => void
@@ -225,7 +223,7 @@ export function SceneContent({
         focusId={focusId}
         objects={state.objects}
         cameras={state.cameras}
-        onTargetChange={onEditorCameraTargetChange}
+        onCameraChange={onEditorCameraCommit}
         onFocusConsumed={onFocusConsumed}
       />
       <Scene3DControls

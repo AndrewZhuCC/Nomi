@@ -420,6 +420,7 @@ export default function Scene3DFullscreen({
   }, [onScreenshot, selectedCamera, trajectory.activeTrajectoryIds, trajectory.playheadRef])
 
   const updateEditorCamera = React.useCallback((editorCamera: Scene3DState['editorCamera']) => {
+    latestEditorCameraRef.current = editorCamera
     setState((current) => {
       const nextEditorCamera = {
         ...current.editorCamera,
@@ -440,24 +441,7 @@ export default function Scene3DFullscreen({
     })
   }, [])
 
-  const updateEditorCameraTarget = React.useCallback((target: Scene3DVector3) => {
-    latestEditorCameraRef.current = {
-      ...latestEditorCameraRef.current,
-      target,
-    }
-    setState((current) => vectorAlmostEqual(current.editorCamera.target, target)
-      ? current
-      : {
-          ...current,
-          editorCamera: {
-            ...current.editorCamera,
-            target,
-          },
-        })
-  }, [])
-
   const handleWheelNavigation = React.useCallback((editorCamera: Scene3DState['editorCamera']) => {
-    latestEditorCameraRef.current = editorCamera
     setViewLocked(false)
     setFocusId('')
     updateEditorCamera(editorCamera)
@@ -868,7 +852,6 @@ export default function Scene3DFullscreen({
               onCameraPatch={patchCamera}
               onEditorCameraDraft={handleEditorCameraDraft}
               onEditorCameraCommit={updateEditorCamera}
-              onEditorCameraTargetChange={updateEditorCameraTarget}
               onWheelNavigation={handleWheelNavigation}
               onTransformInteractionStart={unlockViewForSceneEdit}
               onTransformInteractionEnd={finishSceneTransformInteraction}
