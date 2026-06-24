@@ -33,6 +33,14 @@ export type KnownVendor = {
   tagline: string
   /** 推广位；null = 不展示推广。 */
   promo: KnownVendorPromo | null
+  /**
+   * key 输入框占位（缺省 = 通用 sk- 提示）。
+   * 非 bearer 单 key 的家（如火山语音的 APP_ID:ACCESS_KEY）用它说清格式——
+   * 卡片从名录派生提示，不写死「sk-…」（P2 根因：凭证格式是供应商属性，不是 UI 常量）。
+   */
+  credentialPlaceholder?: string
+  /** key 输入框下方帮助文案（缺省 = 通用「填一次即可…」）。 */
+  credentialHint?: string
 }
 
 export const KNOWN_VENDORS: readonly KnownVendor[] = [
@@ -76,6 +84,22 @@ export const KNOWN_VENDORS: readonly KnownVendor[] = [
       text: '火山方舟（字节跳动）官方。需先在 Ark 控制台「开通管理」激活模型（Seedream/Seedance），再拿 API Key。',
       ctaLabel: '去火山方舟',
       url: 'https://console.volcengine.com/ark',
+    },
+  },
+  {
+    // 火山「语音技术」= 独立产品线，凭证 ≠ 方舟 bearer key（见 volcengineVendor.ts）。
+    // 故必须独立成卡：否则豆包语音音色被归进「其他模型」且写死「已配置」，
+    // 用户既无处填 APP_ID:ACCESS_KEY，又被误导以为已连通（真实坑，2026-06-25 用户反馈）。
+    vendorKey: 'volcengine-speech',
+    glyph: '声',
+    tagline: '官方原生 · 豆包语音 2.0 配音（自然语言情感控制）',
+    credentialPlaceholder: '粘贴 APP_ID:ACCESS_KEY（用冒号拼接）',
+    credentialHint:
+      '火山「语音技术」是独立产品线，凭证与方舟 key 不同套。在语音控制台拿 App ID 与 Access Token，用英文冒号拼成「APP_ID:ACCESS_KEY」填入；需先开通豆包语音合成 2.0 + 付费音色。',
+    promo: {
+      text: '火山「语音技术」官方（与方舟是不同控制台）。开通豆包语音合成 2.0 与付费音色后，拿 App ID 与 Access Token。',
+      ctaLabel: '去火山语音控制台',
+      url: 'https://console.volcengine.com/speech/app',
     },
   },
 ] as const

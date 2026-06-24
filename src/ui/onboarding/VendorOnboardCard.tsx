@@ -140,7 +140,7 @@ export function VendorOnboardCard({
             <input
               type="password"
               aria-label={`${vendorName} API Key`}
-              placeholder="粘贴你的 API Key（sk-…）"
+              placeholder={directory.credentialPlaceholder ?? '粘贴你的 API Key（sk-…）'}
               value={keyDraft}
               onChange={(e) => setKeyDraft(e.currentTarget.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleUnlock() }}
@@ -164,7 +164,7 @@ export function VendorOnboardCard({
               <IconKey size={14} stroke={1.6} />解锁
             </button>
           </div>
-          <div className="text-caption text-nomi-ink-40">填一次即可，密钥本地加密存储、只在调用时使用。</div>
+          <div className="text-caption text-nomi-ink-40">{directory.credentialHint ?? '填一次即可，密钥本地加密存储、只在调用时使用。'}</div>
           {hasApiKey ? (
             <button
               type="button"
