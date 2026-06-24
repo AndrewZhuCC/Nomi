@@ -5,15 +5,19 @@ import {
   type WorkbenchAssetDto,
 } from '../../api/assetUploadApi'
 import type { GenerationCanvasNode } from '../model/generationCanvasTypes'
+import { dropKindFromMime } from '../model/nodeAssetDrop'
+import { readVideoDurationSeconds } from '../../../media/videoDurationProbe'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 
 export const GENERATION_CANVAS_IMAGE_IMPORT_MAX_BYTES = 30 * 1024 * 1024
+// 视频文件远大于图片，单独给宽上限；本地优先 App，用户导入自己的片段。
+export const GENERATION_CANVAS_VIDEO_IMPORT_MAX_BYTES = 600 * 1024 * 1024
 const DATA_URL_FALLBACK_MAX_BYTES = 512 * 1024
 
 export type GenerationAssetImportItem = {
   node: GenerationCanvasNode
   file: File
-  localUrl: string
+  kind: 'image' | 'video'
 }
 
 export type GenerationAssetImportResult = {
@@ -28,6 +32,7 @@ export type ImportImageFilesOptions = {
   createObjectUrl?: (file: File) => string
   revokeObjectUrl?: (url: string) => void
   readImageDimensions?: (url: string) => Promise<ImageDimensions | null>
+  readVideoDuration?: (url: string) => Promise<number | null>
   uploadFile?: typeof importWorkbenchLocalAssetFile
   recoverFile?: typeof recoverImportedWorkbenchLocalAssetFile
 }
@@ -119,7 +124,13 @@ function readFileDataUrl(file: File): Promise<string> {
   })
 }
 
-export function filterImportableImageFiles(files: File[]): {
+/** 仅 image / video 可导入为画布素材节点（音频暂无可落节点，过滤掉）。 */
+function importKindForFile(file: File): 'image' | 'video' | null {
+  const kind = dropKindFromMime(file.type)
+  return kind === 'image' || kind === 'video' ? kind : null
+}
+
+export function filterImportableMediaFiles(files: File[]): {
   files: File[]
   skippedDuplicateCount: number
   skippedTooLargeCount: number
@@ -129,14 +140,16 @@ export function filterImportableImageFiles(files: File[]): {
   let skippedTooLargeCount = 0
   const out: File[] = []
   for (const file of files) {
-    if (!file.type.startsWith('image/')) continue
+    const kind = importKindForFile(file)
+    if (!kind) continue
     const signature = fileSignature(file)
     if (seen.has(signature)) {
       skippedDuplicateCount += 1
       continue
     }
     seen.add(signature)
-    if ((typeof file.size === 'number' ? file.size : 0) > GENERATION_CANVAS_IMAGE_IMPORT_MAX_BYTES) {
+    const maxBytes = kind === 'video' ? GENERATION_CANVAS_VIDEO_IMPORT_MAX_BYTES : GENERATION_CANVAS_IMAGE_IMPORT_MAX_BYTES
+    if ((typeof file.size === 'number' ? file.size : 0) > maxBytes) {
       skippedTooLargeCount += 1
       continue
     }
@@ -145,25 +158,33 @@ export function filterImportableImageFiles(files: File[]): {
   return { files: out, skippedDuplicateCount, skippedTooLargeCount }
 }
 
-export async function importImageFilesToGenerationCanvas(
+export async function importLocalMediaFilesToGenerationCanvas(
   inputFiles: File[],
   options: ImportImageFilesOptions,
 ): Promise<GenerationAssetImportResult> {
   const createObjectUrl = options.createObjectUrl ?? ((file: File) => URL.createObjectURL(file))
   const revokeObjectUrl = options.revokeObjectUrl ?? ((url: string) => URL.revokeObjectURL(url))
   const readImageDimensions = options.readImageDimensions ?? readBrowserImageDimensions
+  const probeVideoDuration = options.readVideoDuration ?? readVideoDurationSeconds
   const uploadFile = options.uploadFile ?? importWorkbenchLocalAssetFile
   const recoverFile = options.recoverFile ?? recoverImportedWorkbenchLocalAssetFile
-  const filtered = filterImportableImageFiles(inputFiles)
+  const filtered = filterImportableMediaFiles(inputFiles)
   const created: GenerationAssetImportItem[] = []
 
   await Promise.all(filtered.files.slice(0, 8).map(async (file, index) => {
-    const localUrl = createObjectUrl(file)
-    const dimensions = await readImageDimensions(localUrl)
+    const kind = importKindForFile(file) ?? 'image'
+    // 视频不在导入时离屏读尺寸（节点渲染的 onLoadedMetadata 会回填 W/H + 真实时长，单源 catch-all）；
+    // 图片仍即时读尺寸以定节点初始大小。
+    let dimensions: ImageDimensions | null = null
+    if (kind === 'image') {
+      const objectUrl = createObjectUrl(file)
+      dimensions = await readImageDimensions(objectUrl)
+      revokeObjectUrl(objectUrl)
+    }
     const size = nodeSizeForDimensions(dimensions)
     const node = useGenerationCanvasStore.getState().addNode({
       kind: 'asset',
-      title: file.name || '参考图片',
+      title: file.name || (kind === 'video' ? '参考视频' : '参考图片'),
       prompt: '',
       position: {
         x: Math.max(40, Math.round(options.basePosition.x + index * 28)),
@@ -182,10 +203,10 @@ export async function importImageFilesToGenerationCanvas(
         ...imageMetaForDimensions(dimensions),
       },
     }, { persist: false })
-    created.push({ node, file, localUrl })
+    created.push({ node, file, kind })
   }))
 
-  await Promise.all(created.map(async ({ node, file, localUrl }) => {
+  await Promise.all(created.map(async ({ node, file, kind }) => {
     let hosted: WorkbenchAssetDto | null = null
     try {
       hosted = await uploadFile(file, deriveLabelFromFileName(file.name), { ownerNodeId: node.id })
@@ -194,7 +215,8 @@ export async function importImageFilesToGenerationCanvas(
     }
     const hostedUrl = hostedAssetUrl(hosted)
     if (!hostedUrl) {
-      const canPersistSmallFallback = (typeof file.size === 'number' ? file.size : 0) <= DATA_URL_FALLBACK_MAX_BYTES
+      // 图片可在极小阈值内退化成 data-url 落盘；视频体积过大，不做 data-url 兜底（直接报错让用户重导）。
+      const canPersistSmallFallback = kind === 'image' && (typeof file.size === 'number' ? file.size : 0) <= DATA_URL_FALLBACK_MAX_BYTES
       const fallbackResult = canPersistSmallFallback
         ? {
             id: `local-${node.id}-${Date.now()}`,
@@ -214,12 +236,14 @@ export async function importImageFilesToGenerationCanvas(
           persistable: Boolean(fallbackResult),
         },
       })
-      revokeObjectUrl(localUrl)
       return
     }
+    // 视频：导入即离屏测真实时长写 meta.videoDuration，消除「渲染前就拖到时间轴」的竞态
+    // （节点渲染的 onLoadedMetadata 仍会二次自愈，两处同一真相键）。
+    const videoDuration = kind === 'video' ? await probeVideoDuration(hostedUrl) : null
     const hostedResult = {
       id: `asset-${node.id}-${hosted?.id || Date.now()}`,
-      type: 'image' as const,
+      type: kind,
       url: hostedUrl,
       assetId: hosted?.id,
       raw: { asset: hosted },
@@ -235,9 +259,9 @@ export async function importImageFilesToGenerationCanvas(
         uploadStatus: 'uploaded',
         localOnly: false,
         serverAssetId: hosted?.id,
+        ...(videoDuration && videoDuration > 0 ? { videoDuration } : {}),
       },
     })
-    revokeObjectUrl(localUrl)
   }))
 
   return {

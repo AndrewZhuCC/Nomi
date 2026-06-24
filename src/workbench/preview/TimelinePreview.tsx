@@ -114,13 +114,17 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
     progressPercent: exportRatio * 100,
   })
 
+  // playhead → <video>.currentTime 同步（playhead 是单一真相源）。
+  // 旧实现「playing 时直接 return」→ 播放中点时间轴中间，playhead 跳了但画面不跟（scrub 失效）。
+  // 改为播放感知阈值：暂停时贴紧（逐帧步进也要跟）；播放时 <video> 自走、与 playhead 实时相近，
+  // 放宽阈值只在 scrub 这种「大跳」时纠正，避免每帧把 currentTime 往回拽造成抖动。
   React.useEffect(() => {
     const video = videoRef.current
     if (!video || !videoClip?.url) return
-    if (playing) return
     const nextTime = resolveVideoClipMediaTimeSeconds({ clip: videoClip, playheadFrame, fps })
     if (!Number.isFinite(nextTime)) return
-    if (Math.abs(video.currentTime - nextTime) < 0.08) return
+    const threshold = playing ? 0.3 : 0.04
+    if (Math.abs(video.currentTime - nextTime) < threshold) return
     video.currentTime = nextTime
   }, [fps, playheadFrame, videoClip, playing])
 

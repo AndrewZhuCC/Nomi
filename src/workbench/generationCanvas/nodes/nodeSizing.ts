@@ -108,6 +108,60 @@ export function mediaNodeSize(
     };
 }
 
+export type MediaMetaPatch = {
+  size?: { width: number; height: number };
+  meta: Record<string, unknown>;
+};
+
+/**
+ * 媒体（图片/视频）loadedmetadata 回填的纯计算：据真实 W/H（视频再带真实时长）算出
+ * 节点尺寸 + meta 补丁；无变化返回 null（调用方不发空 update）。从 BaseGenerationNode 抽出
+ * 保持壳瘦身（R9）+ 可裸测。视频回填 meta.videoDuration 是「拖入视频一律 5 秒」的 catch-all 修复键。
+ */
+export function computeMediaMetaPatch(params: {
+  resultType: string | undefined;
+  meta: Record<string, unknown>;
+  currentSize: { width?: number; height?: number } | undefined;
+  width: number;
+  height: number;
+  durationSeconds?: number;
+}): MediaMetaPatch | null {
+  const { resultType, meta, currentSize, width, height, durationSeconds } = params;
+  const nextSize = mediaNodeSize(width, height, currentSize?.width);
+  if (!nextSize) return null;
+  const isVideo = resultType === "video";
+  const previousWidth = readFiniteNumber(meta.imageWidth ?? meta.videoWidth);
+  const previousHeight = readFiniteNumber(meta.imageHeight ?? meta.videoHeight);
+  const previousDuration = readFiniteNumber(meta.videoDuration);
+  const userResized = meta.userResized === true;
+  const nextDuration =
+    isVideo && Number.isFinite(durationSeconds) && (durationSeconds as number) > 0
+      ? Math.round((durationSeconds as number) * 1000) / 1000
+      : null;
+  const mediaPatch = isVideo
+    ? {
+        videoWidth: width,
+        videoHeight: height,
+        videoAspectRatio: width / height,
+        ...(nextDuration !== null ? { videoDuration: nextDuration } : {}),
+      }
+    : { imageWidth: width, imageHeight: height, imageAspectRatio: width / height };
+  const shouldPatchSize =
+    !userResized &&
+    (currentSize?.width !== nextSize.width || currentSize?.height !== nextSize.height);
+  if (
+    previousWidth === width &&
+    previousHeight === height &&
+    (nextDuration === null || previousDuration === nextDuration) &&
+    !shouldPatchSize
+  )
+    return null;
+  return {
+    ...(shouldPatchSize ? { size: { width: nextSize.width, height: nextSize.height } } : {}),
+    meta: { ...meta, ...mediaPatch, previewHeight: nextSize.previewHeight },
+  };
+}
+
 // 卡片模式（角色/场景/道具/音轨卡）按 cards-design-v1 §4 的固定宽度；高度部分卡固定、部分动态。
 export const CARD_FIXED_WIDTH: Record<string, number> = {
     "character-card": 200,

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { importImageFilesToGenerationCanvas } from './assetImportAdapter'
+import { importLocalMediaFilesToGenerationCanvas } from './assetImportAdapter'
 import { useGenerationCanvasStore, __resetGenerationCanvasHistoryForTests } from '../store/generationCanvasStore'
 
 function makeImageFile(name = 'image.png', size = 1024): File {
@@ -9,7 +9,14 @@ function makeImageFile(name = 'image.png', size = 1024): File {
   })
 }
 
-describe('importImageFilesToGenerationCanvas', () => {
+function makeVideoFile(name = 'clip.mp4', size = 4096): File {
+  return new File([new Uint8Array(size)], name, {
+    type: 'video/mp4',
+    lastModified: 1,
+  })
+}
+
+describe('importLocalMediaFilesToGenerationCanvas', () => {
   beforeEach(() => {
     __resetGenerationCanvasHistoryForTests()
     useGenerationCanvasStore.getState().restoreSnapshot({
@@ -25,7 +32,7 @@ describe('importImageFilesToGenerationCanvas', () => {
     const uploadFile = vi.fn(() => new Promise<any>((resolve) => {
       resolveUpload = resolve
     }))
-    const promise = importImageFilesToGenerationCanvas([makeImageFile()], {
+    const promise = importLocalMediaFilesToGenerationCanvas([makeImageFile()], {
       basePosition: { x: 10, y: 20 },
       createObjectUrl: () => 'blob:preview',
       revokeObjectUrl: vi.fn(),
@@ -57,5 +64,30 @@ describe('importImageFilesToGenerationCanvas', () => {
     const uploadedNode = useGenerationCanvasStore.getState().nodes[0]
     expect(uploadedNode.result?.url).toBe('nomi-local://asset/project-1/image.png')
     expect(uploadedNode.result?.url?.startsWith('data:')).toBe(false)
+  })
+
+  it('imports a video file as a video asset node and records real duration', async () => {
+    const uploadFile = vi.fn(async () => ({
+      id: 'asset-v',
+      name: 'clip',
+      userId: 'local',
+      createdAt: '',
+      updatedAt: '',
+      data: { url: 'nomi-local://asset/project-1/clip.mp4' },
+    }))
+    await importLocalMediaFilesToGenerationCanvas([makeVideoFile()], {
+      basePosition: { x: 10, y: 20 },
+      createObjectUrl: () => 'blob:preview',
+      revokeObjectUrl: vi.fn(),
+      readImageDimensions: async () => null,
+      readVideoDuration: async () => 12.5,
+      uploadFile,
+      recoverFile: async () => null,
+    })
+
+    const node = useGenerationCanvasStore.getState().nodes[0]
+    expect(node.result?.type).toBe('video')
+    expect(node.result?.url).toBe('nomi-local://asset/project-1/clip.mp4')
+    expect(node.meta?.videoDuration).toBe(12.5)
   })
 })

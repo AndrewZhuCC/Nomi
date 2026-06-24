@@ -157,12 +157,15 @@ export function AssetLibraryPanel({ opened, onClose, projectId }: Props): JSX.El
   }, [opened, onClose])
 
   const handleUploadFiles = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.currentTarget.files || []).filter((file) => file.type.startsWith('image/'))
+    const files = Array.from(event.currentTarget.files || []).filter((file) => {
+      const type = file.type || ''
+      return type.startsWith('image/') || type.startsWith('video/')
+    })
     event.currentTarget.value = ''
     if (!files.length) return
     void import('../generationCanvas/adapters/assetImportAdapter')
-      .then(({ importImageFilesToGenerationCanvas }) => {
-        void importImageFilesToGenerationCanvas(files, { basePosition: { x: 120, y: 90 } })
+      .then(({ importLocalMediaFilesToGenerationCanvas }) => {
+        void importLocalMediaFilesToGenerationCanvas(files, { basePosition: { x: 120, y: 90 } })
       })
       .catch((error) => {
         console.error('asset library upload failed', error)
@@ -226,7 +229,7 @@ export function AssetLibraryPanel({ opened, onClose, projectId }: Props): JSX.El
             ref={uploadInputRef}
             className={cn('absolute w-px h-px overflow-hidden opacity-0 pointer-events-none')}
             type="file"
-            accept="image/*"
+            accept="image/*,video/*"
             multiple
             aria-label="素材文件选择器"
             onChange={handleUploadFiles}
@@ -270,7 +273,7 @@ export function AssetLibraryPanel({ opened, onClose, projectId }: Props): JSX.El
               title={assets.length === 0 ? '还没有素材' : '没有匹配的素材'}
               description={
                 assets.length === 0
-                  ? '点「上传」导入图片，或在生成区生成后会自动出现在这里。'
+                  ? '点「上传」导入图片或视频，或在生成区生成后会自动出现在这里。'
                   : '换个筛选或搜索词试试。'
               }
             />

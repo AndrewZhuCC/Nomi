@@ -5,7 +5,8 @@
 import type { DragEvent } from 'react'
 import { WORKSPACE_FILE_DRAG_MIME, buildWorkspaceFileUrl, parseWorkspaceFileDrag } from '../../explorer/workspaceFileDrag'
 import { ASSET_LIBRARY_DRAG_MIME, parseAssetLibraryDrag } from '../../assets/assetLibraryDrag'
-import { importImageFilesToGenerationCanvas } from '../adapters/assetImportAdapter'
+import { importLocalMediaFilesToGenerationCanvas } from '../adapters/assetImportAdapter'
+import { dropKindFromMime } from '../model/nodeAssetDrop'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 
 export type CanvasStageDropContext = {
@@ -78,10 +79,13 @@ export function handleCanvasStageDrop(event: DragEvent<HTMLDivElement>, ctx: Can
     return
   }
 
-  // 3) OS 文件拖入：复制进项目并上传，创建图片节点。
-  const files = Array.from(event.dataTransfer.files || []).filter((file) => file.type.startsWith('image/'))
+  // 3) OS 文件拖入：复制进项目并上传，创建图片 / 视频素材节点（音频无可落节点，过滤）。
+  const files = Array.from(event.dataTransfer.files || []).filter((file) => {
+    const kind = dropKindFromMime(file.type)
+    return kind === 'image' || kind === 'video'
+  })
   if (!files.length) return
   event.preventDefault()
   event.stopPropagation()
-  void importImageFilesToGenerationCanvas(files, { basePosition, categoryId: ctx.activeCategoryId })
+  void importLocalMediaFilesToGenerationCanvas(files, { basePosition, categoryId: ctx.activeCategoryId })
 }
