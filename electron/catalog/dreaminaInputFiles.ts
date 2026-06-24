@@ -11,7 +11,7 @@ import { absolutePathFromLocalAssetUrl } from "../assets/localAssetFile";
 import { extensionFromMime, extensionFromUrl } from "../assets/assetPaths";
 import { hardenedFetch } from "../hardenedFetch";
 
-export type FileParamSpec = { param: string; expose: string; mode: "single" | "csv" | "repeat"; flag?: string };
+export type FileParamSpec = { param: string; expose: string; mode: "single" | "csv" | "repeat" | "array"; flag?: string };
 
 /** 把 request.params 里某键的值归一成 URL 列表（string / string[] / 缺省）。 */
 export function toUrlList(value: unknown): string[] {
@@ -29,6 +29,7 @@ export function toUrlList(value: unknown): string[] {
 export function shapeFileParam(spec: FileParamSpec, paths: string[]): string | string[] {
   if (spec.mode === "single") return paths[0] || "";
   if (spec.mode === "csv") return paths.join(",");
+  if (spec.mode === "array") return paths; // 原样数组（多帧的特殊 build 直接读路径列表）
   // repeat
   const flag = spec.flag || "";
   return paths.map((p) => `${flag}=${p}`);

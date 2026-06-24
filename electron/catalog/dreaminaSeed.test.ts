@@ -71,6 +71,17 @@ describe("即梦 dreamina 全量接线", () => {
     ]);
   });
 
+  it("多帧：独立无变体模型 + image_to_video mapping（build=multiframe，不撞 seedance modelKey）", () => {
+    expect(state.models.find((m) => m.modelKey === "dreamina-multiframe")).toMatchObject({ kind: "video" });
+    const mf = selectTaskMapping(state.mappings, "dreamina", "image_to_video", "dreamina-multiframe");
+    expect(mf?.create.process?.build).toBe("multiframe");
+    expect(mf?.create.process?.fileParams?.[0]).toMatchObject({ param: "mf_images", mode: "array" });
+    // 与 seedance 的 image_to_video 不是同一条（modelKey 区分路由）
+    const seedanceI2v = selectTaskMapping(state.mappings, "dreamina", "image_to_video", "dreamina-seedance-2.0");
+    expect(mf?.id).not.toBe(seedanceI2v?.id);
+    expect(getArchetypeById("dreamina-multiframe")?.modes?.[0]?.slots?.[0]).toMatchObject({ min: 2, max: 20 });
+  });
+
   it("档案：图片 t2i+i2i 模式 + 8 模型变体", () => {
     const arch = getArchetypeById("dreamina-image");
     expect(arch?.kind).toBe("image");

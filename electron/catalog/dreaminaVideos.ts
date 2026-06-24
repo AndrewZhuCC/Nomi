@@ -76,6 +76,23 @@ const IMAGE_TO_VIDEO_CREATE: HttpOperation = {
   provider_meta_mapping: { task_id: "submit_id" },
 };
 
+// 多帧（multiframe2video）：无 model_version → 单列无变体模型（modelKey dreamina-multiframe），不与上面合并 mapping 撞车。
+// args 按图数变形（2 图 shorthand / 3+ 图 N-1 句 --transition-prompt），逻辑在 buildMultiframeArgs；build:"multiframe" 分派它。
+const MULTIFRAME_CREATE: HttpOperation = {
+  method: PROCESS_METHOD,
+  path: "dreamina:multiframe2video",
+  process: {
+    bin: "dreamina",
+    parser: "dreamina-cli",
+    appendDownloadDir: true,
+    build: "multiframe",
+    fileParams: [{ param: "mf_images", expose: "mf_image_paths", mode: "array" }],
+    args: [], // 忽略：build=multiframe 改调 buildMultiframeArgs
+  },
+  response_mapping: { task_id: "submit_id", status: "gen_status", video_url: "video_url" },
+  provider_meta_mapping: { task_id: "submit_id" },
+};
+
 const QUERY_RESULT: HttpOperation = {
   method: PROCESS_METHOD,
   path: "dreamina:query_result",
@@ -98,8 +115,11 @@ const DREAMINA_VIDEO_STATUS: Record<string, string[]> = {
   queued: ["queued", "pending", "in_queue"],
 };
 
+export const DREAMINA_MULTIFRAME_MODEL_KEY = "dreamina-multiframe";
+
 export const DREAMINA_CURATED_MODELS = [
   { modelKey: DREAMINA_VIDEO_MODEL_KEY, labelZh: "即梦 Seedance 2.0（会员）", kind: "video" as const, archetypeId: DREAMINA_ARCHETYPE_ID },
+  { modelKey: DREAMINA_MULTIFRAME_MODEL_KEY, labelZh: "即梦多帧视频（会员）", kind: "video" as const, archetypeId: "dreamina-multiframe" },
 ];
 
 export const DREAMINA_CURATED_MAPPINGS = [
@@ -118,6 +138,15 @@ export const DREAMINA_CURATED_MAPPINGS = [
     modelKey: DREAMINA_VIDEO_MODEL_KEY,
     name: "即梦 Seedance 2.0 · 图生/首尾帧/全能参考",
     create: IMAGE_TO_VIDEO_CREATE,
+    query: QUERY_RESULT,
+    statusMapping: DREAMINA_VIDEO_STATUS,
+  },
+  {
+    id: "seed-dreamina-multiframe-image_to_video",
+    taskKind: "image_to_video" as const,
+    modelKey: DREAMINA_MULTIFRAME_MODEL_KEY,
+    name: "即梦多帧视频 · 2-20 关键帧",
+    create: MULTIFRAME_CREATE,
     query: QUERY_RESULT,
     statusMapping: DREAMINA_VIDEO_STATUS,
   },

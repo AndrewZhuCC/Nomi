@@ -329,6 +329,43 @@ export function normalizeDreaminaVideoResolution(model: string, resolution: unkn
   return "720p";
 }
 
+/** 把多行文本按行拆成非空过渡描述列表。 */
+export function splitTransitionLines(text: unknown): string[] {
+  return String(text ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+}
+
+/**
+ * multiframe2video 的**按图数变形**参数构建（纯函数）。官方 -h：
+ *  - 2 图：`--images a,b --prompt <主提示> [--duration <秒>]`（shorthand）
+ *  - 3+ 图：`--images a,b,c --transition-prompt <P1> --transition-prompt <P2> …`（N 图要 N-1 句；此时不发 --prompt）
+ * 过渡行不足 N-1 时用「最后一句 / 主提示」补齐；多出则截断。3+ 时长走后端默认每段 3s（不发 --duration）。
+ */
+export function buildMultiframeArgs(input: {
+  imagePaths: string[];
+  prompt: string;
+  transitionLines: string[];
+  duration?: unknown;
+}): string[] {
+  const images = input.imagePaths.filter(Boolean);
+  const args = ["multiframe2video", `--images=${images.join(",")}`];
+  if (images.length <= 2) {
+    const prompt = String(input.prompt || "").trim();
+    if (prompt) args.push(`--prompt=${prompt}`);
+    const dur = clampDreaminaDuration(input.duration, 1, 8); // 段时长 [0.5,8]，整数化夹取
+    args.push(`--duration=${dur}`);
+  } else {
+    const need = images.length - 1;
+    const lines = input.transitionLines.map((l) => l.trim()).filter(Boolean);
+    const filler = lines[lines.length - 1] || String(input.prompt || "").trim();
+    const finalLines = Array.from({ length: need }, (_, i) => lines[i] || filler);
+    for (const line of finalLines) {
+      if (line) args.push(`--transition-prompt=${line}`);
+    }
+  }
+  args.push("--poll=30");
+  return args;
+}
+
 // ── 登录 / 账户状态解析（设备码 OAuth + user_credit；供登录 IPC 用，纯函数可测）──
 
 export type DreaminaDeviceFlow = {

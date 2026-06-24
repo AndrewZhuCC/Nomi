@@ -226,13 +226,19 @@ export type HttpOperation = {
     args: string[];
     parser: "dreamina-cli";
     appendDownloadDir?: boolean;
+    /**
+     * 特殊 arg 构建器（声明驱动分派）。缺省=用 `args` 模板渲染。"multiframe"=多帧按图数变形（2 图 shorthand /
+     * 3+ 图 N-1 个 --transition-prompt），逻辑在 dreaminaCodec.buildMultiframeArgs（纯函数可测），processOperation
+     * 据此忽略 args、改调构建器。其余 6 个模式都走通用 args 模板，唯独多帧条数随输入变、模板表达不了。
+     */
+    build?: "multiframe";
     fileParams?: Array<{
       /** request.params 里持有输入资产 URL（string 或 string[]）的键（= 槽 inputKey）。 */
       param: string;
       /** 物化后写回 request.params 的键（被 args 模板 `{{request.params.<expose>}}` 引用）。 */
       expose: string;
-      /** single=取首个路径；csv=逗号连接所有路径；repeat=映射成 `flag=path` 字符串数组（exact 模板 spread 成多参数）。 */
-      mode: "single" | "csv" | "repeat";
+      /** single=取首个路径；csv=逗号连接；repeat=`flag=path` 字符串数组（exact 模板 spread）；array=原样路径数组（多帧 build 直接读）。 */
+      mode: "single" | "csv" | "repeat" | "array";
       /** mode=repeat 时的 flag 名（如 "--image"）。 */
       flag?: string;
     }>;

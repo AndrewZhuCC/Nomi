@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import type { HttpOperation } from "./types";
 import { runDreaminaCli, resolveDreaminaBin } from "./dreaminaCli";
-import { normalizeDreaminaOutput } from "./dreaminaCodec";
+import { normalizeDreaminaOutput, buildMultiframeArgs, splitTransitionLines } from "./dreaminaCodec";
 import { renderTemplateValue } from "../ai/requestPipeline";
 import { contentTypeFromPath } from "../assets/assetPaths";
 import { materializeInputFiles } from "./dreaminaInputFiles";
@@ -56,15 +56,25 @@ export async function executeProcessOperation(input: ProcessOperationInput): Pro
     tempInputs.push(...(await materializeInputFiles(reqParams, input.process.fileParams, input.projectId, inputDir)));
   }
 
-  // 渲染参数（与 HTTP body 同一套 renderTemplateValue）；空值参数（`--flag=`）丢弃 → dreamina 回落该项默认。
-  // 数组结果（repeat-flag 模式：`["--image=/a","--image=/b"]`）展开成多参数。
-  const args: string[] = [];
-  for (const tpl of input.process.args) {
-    const rendered = renderTemplateValue(tpl, input.context);
-    const items = Array.isArray(rendered) ? rendered : [rendered];
-    for (const item of items) {
-      const s = String(item ?? "");
-      if (s && !/=$/.test(s)) args.push(s);
+  // 多帧：args 按图数变形（模板表达不了），分派给纯函数构建器（读已物化的图路径数组 + 主提示 + 过渡行）。
+  let args: string[];
+  if (input.process.build === "multiframe") {
+    const reqParams = (((input.context.request as JsonRecord)?.params) ?? {}) as Record<string, unknown>;
+    const imagePaths = Array.isArray(reqParams.mf_image_paths) ? (reqParams.mf_image_paths as unknown[]).map(String) : [];
+    const prompt = String((input.context.request as JsonRecord)?.prompt ?? "");
+    // 过渡描述用节点提示词（本就是多行 textarea）：2 图用整段当主提示；3+ 图按行拆，每行一句相邻图过渡。
+    args = buildMultiframeArgs({ imagePaths, prompt, transitionLines: splitTransitionLines(prompt), duration: reqParams.duration });
+  } else {
+    // 渲染参数（与 HTTP body 同一套 renderTemplateValue）；空值参数（`--flag=`）丢弃 → dreamina 回落该项默认。
+    // 数组结果（repeat-flag 模式：`["--image=/a","--image=/b"]`）展开成多参数。
+    args = [];
+    for (const tpl of input.process.args) {
+      const rendered = renderTemplateValue(tpl, input.context);
+      const items = Array.isArray(rendered) ? rendered : [rendered];
+      for (const item of items) {
+        const s = String(item ?? "");
+        if (s && !/=$/.test(s)) args.push(s);
+      }
     }
   }
 
