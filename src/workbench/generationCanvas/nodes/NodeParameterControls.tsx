@@ -187,6 +187,14 @@ export default function NodeParameterControls({
   // ── C3 数组参考槽（全能参考，meta-only）：append / remove / 上传，写 node.meta[metaKey] 数组 ──
   const setArrayValue = (metaKey: string, next: string[]) => updateMeta({ [metaKey]: next })
   const handleArrayAdd = (slot: ArchetypeArraySlot, url: string) => {
+    // 容量先按**已占用位置**判（含连线 + pending 边，单源 resolveReferenceSlots），不能只看 meta 数组长度——
+    // 否则被边占满的槽仍允许写入 meta、却落不进槽（显示/发送都没它）=「参考图上不去」。
+    const occupied = resolveReferenceSlots(node, nodes, edges)
+      .find((rs) => referenceSlotStorage({ kind: rs.slotKind })?.metaKey === slot.metaKey)?.fills.length
+    if (occupied != null && occupied >= slot.max) {
+      showInfoToast(`参考已满（最多 ${slot.max} 个，含连线）`)
+      return
+    }
     // 单源去重/上限：与拖入/连线共用 appendArchetypeArrayValue（规则 1：不另开写路径）。
     // 读最新 meta 计算追加（避免基于渲染快照算出过期数组 → 覆盖刚连边写入的项）。
     const result = appendArchetypeArrayValue(getLatestMeta(), slot, url)
@@ -357,10 +365,17 @@ export default function NodeParameterControls({
   // 真的看得见（根治「显示读 meta、生成读边」分裂导致的「连线没用」）。按存储键回填到 assetValuesByKey。
   // pending（连了边但源未生成/待抽帧）本片先不显示空位（占位态留 S4b）；非档案模型仍走旧启发式路径。
   const resolvedFillUrlsByMetaKey = new Map<string, string[]>()
+  // 槽位**已占用位置数**（含「连了边但源未生成」的 pending fill，它占位但 url 为空）。容量判断（能否再加/连）
+  // 必须用它，而非「有 url 的显示图数」或「meta 数组长度」——否则被 pending 边占满的槽仍显示「+」、上传/连线
+  // 写得进去却落不下（resolveReferenceSlots 没空位放）→「参考图上不去 / 连线连不上」（2026-06-25 真机存档定位）。
+  const arrayOccupiedByKey = new Map<string, number>()
   if (archMode) {
     for (const rs of resolveReferenceSlots(node, nodes, edges)) {
       const storage = referenceSlotStorage({ kind: rs.slotKind })
-      if (storage) resolvedFillUrlsByMetaKey.set(storage.metaKey, rs.fills.map((f) => f.url).filter((u): u is string => Boolean(u)))
+      if (storage) {
+        resolvedFillUrlsByMetaKey.set(storage.metaKey, rs.fills.map((f) => f.url).filter((u): u is string => Boolean(u)))
+        arrayOccupiedByKey.set(storage.metaKey, rs.fills.length)
+      }
     }
   }
   const assetValuesByKey: Record<string, string | string[]> = {}
@@ -467,6 +482,7 @@ export default function NodeParameterControls({
         <AssetReference
           slots={assetSlots}
           valuesByKey={assetValuesByKey}
+          occupiedByKey={arrayOccupiedByKey}
           projectId={getDesktopActiveProjectId() || null}
           openSlotKey={openSlotKey}
           uploadingSlotKey={uploadingSlotKey || uploadingArrayKey}
