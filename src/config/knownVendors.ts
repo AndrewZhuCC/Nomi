@@ -41,6 +41,9 @@ export type KnownVendor = {
   credentialPlaceholder?: string
   /** key 输入框下方帮助文案（缺省 = 通用「填一次即可…」）。 */
   credentialHint?: string
+  /** 「新手推荐」软标：仅未接入时显示，帮纯新人在多家里有个默认起点（聚合中转一个 key 全解锁）。
+   *  软提示，不钦点、不占 C 位（用户拍板：留但只当软提示）。 */
+  recommended?: boolean
 }
 
 export const KNOWN_VENDORS: readonly KnownVendor[] = [
@@ -49,6 +52,8 @@ export const KNOWN_VENDORS: readonly KnownVendor[] = [
     logo: new URL('../assets/vendor-logos/apimart.png', import.meta.url).href,
     glyph: 'A',
     tagline: '一个 key，解锁全部预置模型',
+    recommended: true, // 聚合中转，一个 key 解锁图/视频/文本/配音 → 新手最省事的起点
+
     promo: {
       text: '如果你愿意，可以用我们的链接注册；不愿意也可以直接去官方注册。',
       ctaLabel: '用我们的链接',

@@ -131,6 +131,9 @@ export function VendorOnboardCard({
       name={vendorName}
       subtitle={hasApiKey ? `${total} 个模型可用` : directory.tagline}
       status={hasApiKey ? 'ok' : 'todo'}
+      badge={!hasApiKey && directory.recommended ? (
+        <span className="text-micro font-semibold text-nomi-accent bg-nomi-accent-soft rounded-full px-2 py-[2px] whitespace-nowrap">新手推荐</span>
+      ) : undefined}
       defaultExpanded={false}
     >
       {/* key 区 */}

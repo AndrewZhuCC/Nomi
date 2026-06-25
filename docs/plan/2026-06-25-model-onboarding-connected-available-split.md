@@ -100,10 +100,12 @@
 
 纯前端、改动集中在 4 个文件。回滚 = `git revert` 该 commit（或还原这 4 文件）。无数据迁移、无后端、无持久化结构变更，零存量风险。
 
-## 8. 后续（不在本期）
+## 8. 后续
 
-- 聚合中转「新手推荐」软提示微标。
-- 三套 vendor 名单单一来源合并（治本，碰 seed，单独 plan + 单独验）。
+- ✅ **① 聚合中转「新手推荐」软标（已做）**：`KnownVendor.recommended`（apimart=true）→ `VendorOnboardCard` 仅未接入时在卡头渲染 accent-soft 微标，软提示不钦点。FoldableModelCard 加 `badge` 槽。R13 走查确认。
+- ⚠️ **② 三套名单"合并"= 误前提（实查后改口，D3/D4）**：细读发现三套**不是冗余**、按层各司其职——`seedBuiltins`(身份+模型，main) / `KNOWN_VENDORS`(只放 logo/话术，已最小化不重复目录) / `PROVIDER_PRESETS`(手动接入端点，给非 seed 家)。唯一"重叠"火山**不是冗余**：seeded `volcengine`(火山方舟)只 image/video 原生，`PROVIDER_PRESETS.volcengine`(火山/Doubao)是**文本 LLM 的唯一接入路**——删 preset = 砍掉火山文本能力（违 P1/数据别整没）。所以**没有可安全删的冗余**。
+  - ✅ 做了能安全做的治本：**跨层身份键不变量测试**（`src/config/knownVendors.test.ts`：KNOWN_VENDORS.vendorKey ⊆ seed 内置键 + 无重复 + dreamina 专属卡），机器钉死"三套对不上/rename 漂移"，replace 旧人肉对账。
+  - 🔮 真要"一个 key 解锁火山图+视频+文本"= **后端给火山方舟 seed 加 Doubao 文本模型**（碰 seed/curated，§8.1 存量铁律 + 单独验），是新能力非名单合并 → 待用户拍要不要做。
 
 ### 8.1 做②时的存量数据铁律（用户硬要求：版本更新绝不能把用户数据整没）
 
