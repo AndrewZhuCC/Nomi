@@ -1,0 +1,54 @@
+# 白板巨壳拆分（Rule 9 / R12）— 2026-06-25
+
+## 背景
+PR#21 引入白板节点时为过门岗把两个巨壳临时入了白名单：
+- `WhiteboardLeaferCanvas.tsx` — **3406 行**
+- `WhiteboardDrawingTool.tsx` — **1032 行**
+
+两者都远超 ≤800 硬上限。本计划按 Rule 9 拆分，目标两文件都 < 800，清出白名单。
+
+## 现状结构（勘查结论）
+两文件同构：**大组件 + 一长串纯函数尾巴**。
+- **DrawingTool**：组件 246-894（~648 行）+ 尾巴纯函数 896-1032（~136 行）+ 顶部两个展示型子组件 `AspectRatioPopover`(102-189)/`ToolIconButton`(195-210) + `TOOL_ITEMS`。
+- **LeaferCanvas**：类型/常量 17-126 + `LeaferCanvas` forwardRef 组件 128-2231（~2100 行，含一个 ~320 行 leafer 初始化 effect + 指针绘制/框选/多选拖拽/右键菜单/快捷键 handler）+ 尾巴纯函数 2231-3406（~1175 行，全 pure）。
+- 组件靠 50+ 个 `useRef` 大袋子耦合（refs 在 effect/handler 间共享）。
+
+## 不动项
+- 不改任何运行时行为 / 公开 API（`LeaferCanvasHandle`、`WhiteboardDrawingToolHandle`、props 签名保持逐字不变）。
+- 不动 `lib/canvas.ts`、`lib/pointer.ts`、`lib/stroke.ts` 的既有导出（只新增同级模块）。
+- 纯搬运 + 改 import，**零逻辑改动**；任何顺手优化都不在本计划。
+
+## 阶段（每阶段独立过五门 `pnpm run gates`，绿了再下一阶段）
+
+### Phase A — DrawingTool.tsx（易，先做）
+1. 尾巴纯函数（`groupTargetsIntoLayer`/`deleteTargetFromState`/`getAssetPanelItems`/`stripFileExtension`/`isWhiteboardAssetDrag`/`parseLibraryDragPayload`/`clampCanvasPosition`）→ 新 `whiteboardStateOps.ts`。
+2. 展示型子组件 `AspectRatioPopover` + `ToolIconButton` + `TOOL_ITEMS` + `AspectRatioPopoverProps`/`ToolIconButtonProps` → 新 `WhiteboardToolbarControls.tsx`。
+- 预期壳：~790 < 800 → 出白名单。
+
+### Phase B — LeaferCanvas 纯函数尾巴（中，搬运）
+按职责切进新模块（全 pure，零闭包）：
+- `leafer/leaferTypes.ts` — `Leafer*` 类型别名 + `CanvasObject*`/`CanvasPoint`/`SnapGuide` 等域类型 + 常量（`SNAP_DISTANCE` 等）。
+- `lib/canvasBounds.ts` — offset/render-bounds/normalize/union/intersect/svg-rect 几何。
+- `lib/canvasSnap.ts` — `getSnapGuides`/`getNearestSnapDelta`/`getSnappedCanvasMove`/水平垂直线。
+- `lib/canvasHitTest.ts` — `getSelectableCanvasObjectsInBounds`/`getTopmostEditableCanvasObjectAtPoint`/resize handle 命中。
+- `lib/leaferNode.ts` — `getCanvasNode*` 访问器 + 交互状态读写。
+- `lib/canvasStrokeGeometry.ts` — 橡皮/点在笔画内/线段距离/`getSvgPathBounds`/path 平移（`translatePath*`）。
+- `lib/canvasExport.ts` — 视口导出/截图/`hide|restoreEditorOverlays`/文件名。
+- 预期壳：~2231（仍超，进 Phase C）。基线先 ratchet 到实际值锁战果。
+
+### Phase C — LeaferCanvas 组件本体 hook 化（难，核心）
+把 refs 打包成 `useWhiteboardCanvasRefs()` 返回的 typed bag，各 hook 收 `(refs, props/deps)`：
+- `hooks/useLeaferScene.ts` — ~320 行初始化 effect（leafer App/editor/export 动态 import + 渲染同步 effects）。
+- `hooks/usePointerDrawing.ts` — 草稿预览 + brush/eraser 指针 handler + 光标。
+- `hooks/useBoxSelection.ts` — 框选 + 多选拖拽 + stage pointer capture。
+- `hooks/useCanvasSelectionActions.ts` — 选中项 move/delete/flip/group + 右键菜单 + 键盘快捷键 + editor 事件。
+- 壳留：refs/state/`useImperativeHandle`/JSX/hook 装配。
+- 目标壳：< 800 → 出白名单。若个别 hook 抽取风险过高，先 ratchet 基线下调、记 backlog，不强行硬切坏行为。
+
+## 验收门
+- 每阶段：`pnpm run gates`（filesize→tokens→lint→typecheck→test→build）全绿。
+- 收尾：R13 真机走查白板节点（打开白板 → 画笔/橡皮 → 框选/多选拖拽 → 右键翻转/编组 → 截图导出），人眼确认行为零回归。
+- `check-file-sizes.mjs` 白名单移除两条目（或下调基线到实际值）。
+
+## 回滚
+纯搬运，逐 commit 可单独 revert；行为零改动，回滚无数据/状态风险。
