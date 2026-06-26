@@ -88,16 +88,13 @@ try {
   check('失焦自动拉取已出模型（没点任何按钮）', populated)
   await snap(win, 'auto-fetch-success')
 
-  // 本 mock 的 id（gpt-4o/dall-e-3/kling-v1…）Nomi 档案不认得 → 全落「暂不认识」折叠（既有「只导认得的」拍板）。
-  // 验证无死路：展开折叠 → 点一个加入 → 保存解除置灰。
-  const fold = win.locator('text=/Nomi 暂不认识的模型/').first()
-  if (await fold.count()) { await fold.click({ timeout: 2000 }).catch(() => {}); await win.waitForTimeout(400) }
-  const chip = win.locator('button', { hasText: /gpt-4o|dall-e-3|kling-v1|gpt-image-1/ }).first()
-  if (await chip.count()) { await chip.click({ timeout: 2000 }).catch(() => {}); await win.waitForTimeout(500) }
-  await snap(win, 'after-add-one-model')
+  // 全部加入（2026-06-27 拍板，反转「只导认得的」）：mock 的 7 个 id 即使 Nomi 不认得也全加入 → 不再有折叠。
+  check('不再有「Nomi 暂不认识的」折叠（全加入）', (await win.locator('text=/Nomi 暂不认识的模型/').count()) === 0)
+  check('拉到的 id 直接成行（gpt-4o 已在列表）', (await win.locator('text=gpt-4o').count()) > 0)
+  // 拉到即全加入 → 保存直接可点（无需任何手点）。
   const saveBtn = win.locator('button', { hasText: /^保存$|仍要保存|确认保存/ }).last()
   const saveDisabled = await saveBtn.isDisabled().catch(() => true)
-  check('加入模型后保存可点（无死路，置灰解除）', !saveDisabled)
+  check('自动拉取后保存直接可点（零手点，置灰解除）', !saveDisabled)
 
   // ByteString：粘带全角字符的 key → 测试连接 → 人话而非原始报错。
   const keyInput = win.locator('input[placeholder="sk-..."]').first()

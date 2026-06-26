@@ -16,7 +16,6 @@ import { getDesktopBridge } from '../../desktop/bridge'
 import type { ProviderKind } from '../../desktop/providerKind'
 import { resolveManualSaveAction } from './onboardingSaveGate'
 import { PROVIDER_PRESETS } from './providerPresets'
-import { resolveArchetypeForModel } from '../../config/modelArchetypes'
 import { cn } from '../../utils/cn'
 import { Field } from './onboardingWizardSupport'
 
@@ -77,9 +76,6 @@ export function OnboardingWizard({ opened, onClose, onCommitted, initialPreset }
   const [models, setModels] = React.useState<Array<{ id: string; kind: ModelKind }>>([])
   // Auto-fetched model ids (GET /models) used as TagsInput autocomplete suggestions.
   const [fetchedModels, setFetchedModels] = React.useState<string[]>([])
-  // 中转「只导认得的」：拉到的里 Nomi 认不出档案的（多为杂牌）默认不自动添加，折叠在这，可手动加。
-  const [unrecognizedModels, setUnrecognizedModels] = React.useState<string[]>([])
-  const [showUnrecognized, setShowUnrecognized] = React.useState(false)
   const [fetchingModels, setFetchingModels] = React.useState(false)
   const [fetchModelsMsg, setFetchModelsMsg] = React.useState('')
   // 失焦自动拉取的去重签名：记录已自动拉过的 baseUrl\0apiKey\0协议，避免每次失焦重拉。
@@ -188,18 +184,11 @@ export function OnboardingWizard({ opened, onClose, onCommitted, initialPreset }
       })
       if (res.ok && res.models && res.models.length > 0) {
         setFetchedModels(res.models)
-        // 只导认得的（用户拍板）：能匹配 Nomi 档案身份的自动添加；认不出的（中转杂牌）折叠、默认不勾。
-        const already = new Set(models.map(m => m.id))
-        const recognized = res.models.filter(id => resolveArchetypeForModel({ modelKey: id }))
-        const unrecognized = res.models.filter(id => !resolveArchetypeForModel({ modelKey: id }) && !already.has(id))
-        await applyModelIds([...models.map(m => m.id), ...recognized])
-        setUnrecognizedModels(unrecognized)
-        setShowUnrecognized(false)
-        setFetchModelsMsg(
-          unrecognized.length > 0
-            ? `拉到 ${res.models.length} 个：自动添加 ${recognized.length} 个 Nomi 认得的；另有 ${unrecognized.length} 个 Nomi 暂不认识的已折叠，可手动添加`
-            : `拉到 ${res.models.length} 个，已按类型自动分好（可改 / 删）`,
-        )
+        // 全部加入（用户拍板 2026-06-27，反转旧「只导认得的」）：认得的带档案参数、不认得的走
+        // guessKinds 猜类型的通用档，都直接加入并按类型分好——老师拉到即能用，不必再翻折叠手点。
+        // 多余的用下方 TagsInput 的标签 × 删即可。
+        await applyModelIds([...models.map(m => m.id), ...res.models])
+        setFetchModelsMsg(`拉到 ${res.models.length} 个，已全部加入并按类型自动分好（可改 / 删）`)
       } else if (res.ok) {
         setFetchedModels([])
         setFetchModelsMsg('这个地址没自动列出模型，可在下方手动输入模型 id，或重新拉取')
@@ -484,38 +473,6 @@ export function OnboardingWizard({ opened, onClose, onCommitted, initialPreset }
                       />
                     </Group>
                   ))}
-                </Stack>
-              )}
-              {/* 「只导认得的」其余折叠：未识别模型默认不勾，点开手动添加（不丢任何模型）。 */}
-              {unrecognizedModels.length > 0 && (
-                <Stack gap={6}>
-                  <Anchor
-                    component="button"
-                    type="button"
-                    onClick={() => setShowUnrecognized(v => !v)}
-                    style={{ fontSize: 12, color: 'var(--nomi-ink-60)', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                  >
-                    {showUnrecognized ? <IconChevronDown size={13} /> : <IconChevronRight size={13} />}
-                    另有 {unrecognizedModels.length} 个 Nomi 暂不认识的模型，可展开手动添加
-                  </Anchor>
-                  <Collapse in={showUnrecognized}>
-                    <Group gap={6} wrap="wrap">
-                      {unrecognizedModels.map(id => (
-                        <DesignButton
-                          key={id}
-                          variant="subtle"
-                          size="xs"
-                          leftSection={<IconPlus size={12} />}
-                          onClick={() => {
-                            void applyModelIds([...models.map(m => m.id), id])
-                            setUnrecognizedModels(prev => prev.filter(x => x !== id))
-                          }}
-                        >
-                          {id}
-                        </DesignButton>
-                      ))}
-                    </Group>
-                  </Collapse>
                 </Stack>
               )}
             </Stack>
