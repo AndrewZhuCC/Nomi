@@ -37,6 +37,7 @@ export const useGenerationCanvasStore = create<GenerationCanvasState>()(subscrib
   ...createDefaultGenerationCanvasSnapshot(),
   selectedNodeIds: [],
   pendingConnectionSourceId: '',
+  pendingConnectionSourceSide: 'right',
   canvasZoom: 1,
   canvasOffset: { x: 0, y: 0 },
   generationAiDraft: '',
@@ -124,6 +125,7 @@ export const useGenerationCanvasStore = create<GenerationCanvasState>()(subscrib
       state.edges = [...state.edges, ...cloned.edges]
       state.selectedNodeIds = cloned.selectedNodeIds
       state.pendingConnectionSourceId = ''
+      state.pendingConnectionSourceSide = 'right'
       bumpPersistRevision(state)
       Object.assign(state, getHistoryFlags())
     })
@@ -144,6 +146,7 @@ export const useGenerationCanvasStore = create<GenerationCanvasState>()(subscrib
       const surviving = new Set(previous.nodes.map((node) => node.id))
       state.selectedNodeIds = state.selectedNodeIds.filter((id) => surviving.has(id))
       state.pendingConnectionSourceId = ''
+      state.pendingConnectionSourceSide = 'right'
       bumpPersistRevision(state)
       Object.assign(state, getHistoryFlags())
     })
@@ -160,6 +163,7 @@ export const useGenerationCanvasStore = create<GenerationCanvasState>()(subscrib
       const surviving = new Set(next.nodes.map((node) => node.id))
       state.selectedNodeIds = state.selectedNodeIds.filter((id) => surviving.has(id))
       state.pendingConnectionSourceId = ''
+      state.pendingConnectionSourceSide = 'right'
       bumpPersistRevision(state)
       Object.assign(state, getHistoryFlags())
     })
@@ -198,6 +202,7 @@ export const useGenerationCanvasStore = create<GenerationCanvasState>()(subscrib
       // S5-b-0:重开项目不再恢复幽灵选区(老 payload 里残存的 selectedNodeIds 忽略)
       selectedNodeIds: [],
       pendingConnectionSourceId: '',
+      pendingConnectionSourceSide: 'right',
       canvasZoom: 1,
       canvasOffset: { x: 0, y: 0 },
       hasClipboard: false,
@@ -228,6 +233,7 @@ export const useGenerationCanvasStore = create<GenerationCanvasState>()(subscrib
       const surviving = new Set(normalized.nodes.map((node) => node.id))
       state.selectedNodeIds = state.selectedNodeIds.filter((id) => surviving.has(id))
       state.pendingConnectionSourceId = ''
+      state.pendingConnectionSourceSide = 'right'
       bumpPersistRevision(state) // 触发 700ms 防抖落盘
       Object.assign(state, getHistoryFlags())
     })

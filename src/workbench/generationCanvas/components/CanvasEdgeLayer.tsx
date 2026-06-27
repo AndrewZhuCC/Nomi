@@ -4,6 +4,7 @@ import { cn } from '../../../utils/cn'
 import { EDGE_MODE_LABEL } from '../model/graphOps'
 import type { GenerationCanvasEdge, GenerationCanvasNode } from '../model/generationCanvasTypes'
 import { resolveNodeVisualSize } from '../nodes/nodeSizing'
+import type { ConnectionAnchorSide } from '../store/canvasStoreTypes'
 
 export type ActiveEdge = {
   id: string
@@ -25,6 +26,7 @@ type CanvasEdgeLayerProps = {
   activeEdge: ActiveEdge | null
   readOnly: boolean
   pendingConnectionSourceId: string
+  pendingConnectionSourceSide: ConnectionAnchorSide
   pendingCursorPos: { x: number; y: number } | null
   onSetActiveEdge: (edge: ActiveEdge | null) => void
   onDisconnectEdge: (edgeId: string) => void
@@ -43,6 +45,7 @@ function CanvasEdgeLayer({
   activeEdge,
   readOnly,
   pendingConnectionSourceId,
+  pendingConnectionSourceSide,
   pendingCursorPos,
   onSetActiveEdge,
   onDisconnectEdge,
@@ -74,15 +77,17 @@ function CanvasEdgeLayer({
           // 起笔/落点会偏到节点框外（character-card 名义 300 实渲 200 → 连线飘在右侧 100px 外的根因）。
           const sourceSize = resolveNodeVisualSize(source)
           const targetSize = resolveNodeVisualSize(target)
-          const startX = source.position.x + sourceSize.width
+          const targetIsLeft = target.position.x + targetSize.width / 2 < source.position.x + sourceSize.width / 2
+          const startX = targetIsLeft ? source.position.x : source.position.x + sourceSize.width
           const startY = source.position.y + sourceSize.height / 2
-          const endX = target.position.x
+          const endX = targetIsLeft ? target.position.x + targetSize.width : target.position.x
           const endY = target.position.y + targetSize.height / 2
           const control = Math.max(64, Math.min(140, Math.abs(endX - startX) * 0.45))
+          const direction = targetIsLeft ? -1 : 1
           const mode = edge.mode || 'reference'
           const midX = (startX + endX) / 2
           const midY = (startY + endY) / 2
-          const path = `M ${startX} ${startY} C ${startX + control} ${startY}, ${endX - control} ${endY}, ${endX} ${endY}`
+          const path = `M ${startX} ${startY} C ${startX + control * direction} ${startY}, ${endX - control * direction} ${endY}, ${endX} ${endY}`
           return { edge, source, target, endX, endY, midX, midY, path, mode, isTyped: mode !== 'reference' }
         })
         .filter((geom): geom is NonNullable<typeof geom> => geom !== null),
@@ -172,15 +177,18 @@ function CanvasEdgeLayer({
         const sourceNode = nodeById.get(pendingConnectionSourceId)
         if (!sourceNode) return null
         const sourceSize = resolveNodeVisualSize(sourceNode)
-        const startX = sourceNode.position.x + sourceSize.width
+        const startX = pendingConnectionSourceSide === 'left'
+          ? sourceNode.position.x
+          : sourceNode.position.x + sourceSize.width
         const startY = sourceNode.position.y + sourceSize.height / 2
         const endX = pendingCursorPos.x
         const endY = pendingCursorPos.y
         const ctrl = Math.max(40, Math.abs(endX - startX) * 0.45)
+        const direction = pendingConnectionSourceSide === 'left' ? -1 : 1
         return (
           <path
             className="generation-canvas-v2__edge-preview"
-            d={`M ${startX} ${startY} C ${startX + ctrl} ${startY}, ${endX - ctrl} ${endY}, ${endX} ${endY}`}
+            d={`M ${startX} ${startY} C ${startX + ctrl * direction} ${startY}, ${endX - ctrl * direction} ${endY}, ${endX} ${endY}`}
           />
         )
       })()}

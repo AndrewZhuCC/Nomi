@@ -2,18 +2,21 @@
 // pointermove 高频 → rAF 节流，预览线每帧最多更新一次（避免大图连线掉帧，B3）。
 import React from 'react'
 import { completeNodeConnection } from '../nodes/completeNodeConnection'
+import type { ConnectionAnchorSide } from '../store/canvasStoreTypes'
 
 type Offset = { x: number; y: number }
 
 type UseDragToConnectArgs = {
   readOnly: boolean
   pendingConnectionSourceId: string
+  pendingConnectionSourceSide: ConnectionAnchorSide
   stageRef: React.RefObject<HTMLDivElement>
   offsetRef: React.MutableRefObject<Offset>
   zoomRef: React.MutableRefObject<number>
   cancelConnection: () => void
   onDropOnEmpty?: (input: {
     sourceNodeId: string
+    sourceSide: ConnectionAnchorSide
     stagePoint: Offset
     canvasPoint: Offset
     clientPoint: Offset
@@ -23,6 +26,7 @@ type UseDragToConnectArgs = {
 export function useDragToConnect({
   readOnly,
   pendingConnectionSourceId,
+  pendingConnectionSourceSide,
   stageRef,
   offsetRef,
   zoomRef,
@@ -72,6 +76,7 @@ export function useDragToConnect({
           const stagePoint = { x: event.clientX - rect.left, y: event.clientY - rect.top }
           onDropOnEmpty({
             sourceNodeId: pendingConnectionSourceId,
+            sourceSide: pendingConnectionSourceSide,
             stagePoint,
             canvasPoint: { x: (stagePoint.x - o.x) / z, y: (stagePoint.y - o.y) / z },
             clientPoint: { x: event.clientX, y: event.clientY },
@@ -87,7 +92,7 @@ export function useDragToConnect({
       document.removeEventListener('pointerup', handleUp)
       if (frame !== null) window.cancelAnimationFrame(frame)
     }
-  }, [pendingConnectionSourceId, cancelConnection, onDropOnEmpty, readOnly, offsetRef, stageRef, zoomRef])
+  }, [pendingConnectionSourceId, pendingConnectionSourceSide, cancelConnection, onDropOnEmpty, readOnly, offsetRef, stageRef, zoomRef])
 
   return { pendingCursorPos }
 }

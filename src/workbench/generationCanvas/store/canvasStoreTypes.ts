@@ -14,6 +14,8 @@ import type { EdgeCapabilityResult } from '../agent/referenceEdgeCapability'
 import type { CanvasMutationOptions } from './canvasGuards'
 import type { NodeProgressInput, NodeRunRecordInput, NodeRunRecordPatch } from './runRecordHelpers'
 
+export type ConnectionAnchorSide = 'left' | 'right'
+
 export type CreateNodeInput = {
   kind: GenerationNodeKind
   title?: string
@@ -53,7 +55,7 @@ export type CanvasNodeActions = {
 }
 
 export type CanvasGraphActions = {
-  startConnection: (nodeId: string) => void
+  startConnection: (nodeId: string, side?: ConnectionAnchorSide) => void
   cancelConnection: () => void
   // 返回连边能力校验结果:ok=已连;否则带 reason(手动连线总闸,UI 据此提示)。
   connectToNode: (targetNodeId: string) => EdgeCapabilityResult
@@ -92,6 +94,7 @@ export type GenerationCanvasState = {
   groups: NodeGroup[]
   selectedNodeIds: string[]
   pendingConnectionSourceId: string
+  pendingConnectionSourceSide: ConnectionAnchorSide
   canvasZoom: number
   canvasOffset: { x: number; y: number }
   generationAiDraft: string

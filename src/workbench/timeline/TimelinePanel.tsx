@@ -4,6 +4,7 @@ import {
   IconArrowForwardUp,
   IconArrowLeft,
   IconArrowRight,
+  IconChevronDown,
   IconCopy,
   IconCut,
   IconMinus,
@@ -74,9 +75,10 @@ type TimelinePanelProps = {
   actionLabelPrefix: string
   /** 是否显示文字轨（字幕/标题卡）。仅预览标签传 true；生成画布底部不传。 */
   showTextTrack?: boolean
+  onCollapse?: () => void
 }
 
-export default function TimelinePanel({ density = 'compact', regionLabel, actionLabelPrefix, showTextTrack = false }: TimelinePanelProps): JSX.Element {
+export default function TimelinePanel({ density = 'compact', regionLabel, actionLabelPrefix, showTextTrack = false, onCollapse }: TimelinePanelProps): JSX.Element {
   const timeline = useWorkbenchStore((state) => state.timeline)
   const selectedClipIds = useWorkbenchStore((state) => state.selectedTimelineClipIds)
   const selectedTextClipId = useWorkbenchStore((state) => state.selectedTextClipId)
@@ -324,6 +326,14 @@ export default function TimelinePanel({ density = 'compact', regionLabel, action
           <WorkbenchIconButton className={cn('workbench-timeline__tool', 'w-auto min-w-[30px] h-[var(--workbench-control-size)] px-2 inline-grid place-items-center border-0 rounded-[var(--workbench-control-radius)] bg-transparent text-[var(--workbench-muted)] shadow-none cursor-pointer hover:bg-[var(--workbench-hover)]')} label="重置缩放" icon={<IconRefresh size={14} />} onClick={() => setTimelineZoom(1)} />
           <WorkbenchIconButton className={cn('workbench-timeline__tool', 'w-auto min-w-[30px] h-[var(--workbench-control-size)] px-2 inline-grid place-items-center border-0 rounded-[var(--workbench-control-radius)] bg-transparent text-[var(--workbench-muted)] shadow-none cursor-pointer hover:bg-[var(--workbench-hover)]')} label={`${actionLabelPrefix}放大时间轴`} icon={<IconPlus size={14} />} onClick={() => setTimelineZoom(timeline.scale * 1.25)} />
           <WorkbenchIconButton className={cn('workbench-timeline__tool', 'w-auto min-w-[30px] h-[var(--workbench-control-size)] px-2 inline-grid place-items-center border-0 rounded-[var(--workbench-control-radius)] bg-transparent text-[var(--workbench-muted)] shadow-none cursor-pointer hover:bg-[var(--workbench-hover)]')} label={`${actionLabelPrefix}删除选中片段`} icon={<IconTrash size={14} />} disabled={!hasSelection} onClick={() => removeSelectedTimelineClips()} />
+          {onCollapse ? (
+            <WorkbenchIconButton
+              className={cn('workbench-timeline__tool', 'w-auto min-w-[30px] h-[var(--workbench-control-size)] px-2 inline-grid place-items-center border-0 rounded-[var(--workbench-control-radius)] bg-transparent text-[var(--workbench-muted)] shadow-none cursor-pointer hover:bg-[var(--workbench-hover)]')}
+              label={`${actionLabelPrefix}收起时间轴`}
+              icon={<IconChevronDown size={14} />}
+              onClick={onCollapse}
+            />
+          ) : null}
         </div>
       </div>
       <div

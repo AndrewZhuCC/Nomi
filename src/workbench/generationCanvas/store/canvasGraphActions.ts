@@ -8,11 +8,11 @@ import { emitCanvasGesture } from '../events/canvasEventEmitter'
 import type { CanvasGraphActions, CanvasSliceCreator } from './canvasStoreTypes'
 
 export const createCanvasGraphActions: CanvasSliceCreator<CanvasGraphActions> = (set, get) => ({
-  startConnection: (nodeId) => {
-    set({ pendingConnectionSourceId: nodeId })
+  startConnection: (nodeId, side = 'right') => {
+    set({ pendingConnectionSourceId: nodeId, pendingConnectionSourceSide: side })
   },
   cancelConnection: () => {
-    set({ pendingConnectionSourceId: '' })
+    set({ pendingConnectionSourceId: '', pendingConnectionSourceSide: 'right' })
   },
   connectToNode: (targetNodeId) => {
     const sourceNodeId = get().pendingConnectionSourceId
@@ -34,6 +34,7 @@ export const createCanvasGraphActions: CanvasSliceCreator<CanvasGraphActions> = 
       if (!verdict.ok) {
         set((state) => {
           state.pendingConnectionSourceId = ''
+          state.pendingConnectionSourceSide = 'right'
         })
         return verdict
       }
@@ -46,6 +47,7 @@ export const createCanvasGraphActions: CanvasSliceCreator<CanvasGraphActions> = 
         bumpPersistRevision(state)
       }
       state.pendingConnectionSourceId = ''
+      state.pendingConnectionSourceSide = 'right'
     })
     if (get().edges !== beforeEdges) {
       emitCanvasGesture([{ type: 'canvas.edge.connected', payload: { sourceNodeId, targetNodeId, mode } }])

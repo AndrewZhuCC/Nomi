@@ -1,4 +1,6 @@
 import React from 'react'
+import { IconChevronUp, IconMovie } from '@tabler/icons-react'
+import { WorkbenchIconButton } from '../../design'
 import { cn } from '../../utils/cn'
 import TimelinePanel from '../timeline/TimelinePanel'
 import { useWorkbenchStore } from '../workbenchStore'
@@ -16,6 +18,7 @@ export default function GenerationWorkspace({
 }: GenerationWorkspaceProps): JSX.Element {
   const width = useWorkbenchStore((s) => s.assistantWidth)
   const setWidth = useWorkbenchStore((s) => s.setAssistantWidth)
+  const [timelineCollapsed, setTimelineCollapsed] = React.useState(false)
   const dragRef = React.useRef<{ startX: number; startW: number } | null>(null)
   const onPointerDown = React.useCallback((e: React.PointerEvent) => {
     dragRef.current = { startX: e.clientX, startW: width }
@@ -32,8 +35,13 @@ export default function GenerationWorkspace({
     try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* noop */ }
   }, [])
   const sidebarStyle = aiSidebar && aiLayout === 'sidebar'
-    ? ({ gridTemplateColumns: `minmax(0,1fr) ${width}px` } as React.CSSProperties)
-    : undefined
+    ? {
+        gridTemplateColumns: `minmax(0,1fr) ${width}px`,
+        gridTemplateRows: `minmax(0,1fr) ${timelineCollapsed ? '42px' : 'var(--workbench-timeline-height)'}`,
+      } as React.CSSProperties
+    : {
+        gridTemplateRows: `minmax(0,1fr) ${timelineCollapsed ? '42px' : 'var(--workbench-timeline-height)'}`,
+      } as React.CSSProperties
   return (
     <section
       className={cn(
@@ -85,9 +93,45 @@ export default function GenerationWorkspace({
       ) : null}
       <div className={cn(
         'workbench-generation__timeline',
-        'col-span-full min-w-0 min-h-0',
+        'relative col-span-full min-w-0 min-h-0',
       )}>
-        <TimelinePanel density="compact" regionLabel="生成时间轴" actionLabelPrefix="生成时间轴-" />
+        {timelineCollapsed ? (
+          <section
+            className={cn(
+              'workbench-generation__timeline-collapsed',
+              'grid h-full min-h-0 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3',
+              'border-t border-[var(--workbench-border)] bg-[var(--workbench-surface-solid)] px-4',
+              'shadow-[0_-1px_0_var(--workbench-bevel)]',
+            )}
+            aria-label="生成时间轴已收起"
+          >
+            <div className={cn('inline-flex min-w-0 items-center gap-2 text-workbench-muted')}>
+              <span
+                className={cn(
+                  'grid size-7 shrink-0 place-items-center rounded-[var(--workbench-control-radius)]',
+                  'bg-[var(--workbench-surface-soft)] text-workbench-muted',
+                )}
+                aria-hidden="true"
+              >
+                <IconMovie size={15} stroke={1.8} />
+              </span>
+              <span className="truncate text-body-sm font-medium text-workbench-ink">生成时间轴</span>
+            </div>
+            <WorkbenchIconButton
+              className="size-8"
+              label="展开生成时间轴"
+              icon={<IconChevronUp size={15} />}
+              onClick={() => setTimelineCollapsed(false)}
+            />
+          </section>
+        ) : (
+          <TimelinePanel
+            density="compact"
+            regionLabel="生成时间轴"
+            actionLabelPrefix="生成时间轴-"
+            onCollapse={() => setTimelineCollapsed(true)}
+          />
+        )}
       </div>
     </section>
   )

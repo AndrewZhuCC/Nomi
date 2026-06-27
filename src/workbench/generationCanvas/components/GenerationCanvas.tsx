@@ -8,6 +8,7 @@ import { WORKSPACE_FILE_DRAG_MIME } from '../../explorer/workspaceFileDrag'
 import { ASSET_LIBRARY_DRAG_MIME } from '../../assets/assetLibraryDrag'
 import { handleCanvasStageDrop } from './canvasStageDrop'
 import type { GenerationNodeKind } from '../model/generationCanvasTypes'
+import { isImageLikeGenerationNodeKind } from '../model/generationNodeKinds'
 import { getGenerationNodeComponent } from '../nodes/renderRegistry'
 import { completeNodeConnection } from '../nodes/completeNodeConnection'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
@@ -33,6 +34,7 @@ import {
 } from './generationCanvasGeometry'
 import { useCanvasViewport } from './useCanvasViewport'
 import CanvasEdgeLayer, { type ActiveEdge } from './CanvasEdgeLayer'
+import type { ConnectionAnchorSide } from '../store/canvasStoreTypes'
 import { StagingCaptureHost } from '../nodes/scene3d/StagingCaptureHost'
 import { CameraMoveCaptureHost } from '../nodes/scene3d/CameraMoveCaptureHost'
 import '../styles/generationCanvas.css'
@@ -84,6 +86,7 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
   const commitPersistedChange = useGenerationCanvasStore((state) => state.commitPersistedChange)
   const disconnectEdge = useGenerationCanvasStore((state) => state.disconnectEdge)
   const pendingConnectionSourceId = useGenerationCanvasStore((state) => state.pendingConnectionSourceId)
+  const pendingConnectionSourceSide = useGenerationCanvasStore((state) => state.pendingConnectionSourceSide)
   const cancelConnection = useGenerationCanvasStore((state) => state.cancelConnection)
   const undo = useGenerationCanvasStore((state) => state.undo)
   const redo = useGenerationCanvasStore((state) => state.redo)
@@ -125,6 +128,7 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
   } | null>(null)
   const [connectionCreateMenu, setConnectionCreateMenu] = React.useState<{
     sourceNodeId: string
+    sourceSide: ConnectionAnchorSide
     stageX: number
     stageY: number
     canvasX: number
@@ -286,6 +290,7 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
 
   React.useEffect(() => {
     if (!connectionCreateMenu) return
+    if (!pendingConnectionSourceId) return
     if (pendingConnectionSourceId === connectionCreateMenu.sourceNodeId) return
     setConnectionCreateMenu(null)
   }, [connectionCreateMenu, pendingConnectionSourceId])
@@ -294,14 +299,15 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
   const { pendingCursorPos } = useDragToConnect({
     readOnly,
     pendingConnectionSourceId,
+    pendingConnectionSourceSide,
     stageRef,
     offsetRef,
     zoomRef,
     cancelConnection,
-    onDropOnEmpty: ({ sourceNodeId, stagePoint, canvasPoint }) => {
+    onDropOnEmpty: ({ sourceNodeId, sourceSide, stagePoint, canvasPoint }) => {
       const sourceNode = allNodesRef.current.find((node) => node.id === sourceNodeId)
-      const sourceCanSeedMedia = sourceNode?.result?.type === 'image' && Boolean(sourceNode.result.url)
-      if (!sourceCanSeedMedia || !stageRef.current) {
+      const sourceCanCreateMedia = sourceNode?.kind === 'image' || Boolean(sourceNode && isImageLikeGenerationNodeKind(sourceNode.kind))
+      if (!sourceCanCreateMedia || !stageRef.current) {
         cancelConnection()
         return
       }
@@ -309,8 +315,10 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
       const menuWidth = 132
       const menuHeight = 76
       setContextNodeMenu(null)
+      cancelConnection()
       setConnectionCreateMenu({
         sourceNodeId,
+        sourceSide,
         stageX: clampNumber(stagePoint.x, 8, Math.max(8, rect.width - menuWidth - 8)),
         stageY: clampNumber(stagePoint.y, 8, Math.max(8, rect.height - menuHeight - 8)),
         canvasX: Math.round(canvasPoint.x),
@@ -429,13 +437,15 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
   const handleAddConnectedNode = (kind: GenerationNodeKind) => {
     if (!connectionCreateMenu) return
     const sourceNodeId = connectionCreateMenu.sourceNodeId
+    const sourceSide = connectionCreateMenu.sourceSide
     const created = addNode({
       kind,
       position: { x: connectionCreateMenu.canvasX, y: connectionCreateMenu.canvasY },
       categoryId: activeCategoryId,
+      exactPosition: true,
       select: true,
     })
-    startConnection(sourceNodeId)
+    startConnection(sourceNodeId, sourceSide)
     completeNodeConnection(created.id)
     setConnectionCreateMenu(null)
   }
@@ -552,8 +562,9 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
               focusedNodeId={selectedNodeIds.length === 1 ? selectedNodeIds[0] : null}
               activeEdge={activeEdge}
               readOnly={readOnly}
-              pendingConnectionSourceId={pendingConnectionSourceId}
-              pendingCursorPos={pendingCursorPos}
+              pendingConnectionSourceId={connectionCreateMenu?.sourceNodeId ?? pendingConnectionSourceId}
+              pendingConnectionSourceSide={connectionCreateMenu?.sourceSide ?? pendingConnectionSourceSide}
+              pendingCursorPos={connectionCreateMenu ? { x: connectionCreateMenu.canvasX, y: connectionCreateMenu.canvasY } : pendingCursorPos}
               onSetActiveEdge={setActiveEdge}
               onDisconnectEdge={disconnectEdge}
               getCanvasPointFromClientPoint={getCanvasPointFromClientPoint}

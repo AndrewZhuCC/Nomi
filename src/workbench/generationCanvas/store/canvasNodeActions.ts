@@ -75,6 +75,7 @@ export const createCanvasNodeActions: CanvasSliceCreator<CanvasNodeActions> = (s
       state.nodes = upsertNode(state.nodes, nextNode)
       state.selectedNodeIds = input.select === false ? state.selectedNodeIds : [nextNode.id]
       state.pendingConnectionSourceId = ''
+      state.pendingConnectionSourceSide = 'right'
       bumpPersistRevision(state)
       Object.assign(state, getHistoryFlags())
     })
@@ -217,7 +218,7 @@ export const createCanvasNodeActions: CanvasSliceCreator<CanvasNodeActions> = (s
     })
   },
   clearSelection: () => {
-    set({ selectedNodeIds: [], pendingConnectionSourceId: '' })
+    set({ selectedNodeIds: [], pendingConnectionSourceId: '', pendingConnectionSourceSide: 'right' })
   },
   // v0.7.5: 全选当前分类的所有节点（如果传 categoryId 则限定，否则全选画布所有节点）
   selectAllNodes: (categoryId?: string) => {
