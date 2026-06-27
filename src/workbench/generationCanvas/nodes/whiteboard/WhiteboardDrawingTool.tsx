@@ -3,11 +3,8 @@ import {
   IconBrush,
   IconCamera,
   IconCheck,
-  IconEye,
-  IconEyeOff,
   IconMaximize,
   IconMinimize,
-  IconPhoto,
   IconPhotoPlus,
   IconTrash,
 } from '@tabler/icons-react'
@@ -27,7 +24,7 @@ import {
   type CanvasStroke,
   type LeaferCanvasHandle,
 } from './WhiteboardLeaferCanvas'
-import type { WhiteboardInitialImage, WhiteboardState } from './whiteboardTypes'
+import type { WhiteboardInitialImage, WhiteboardResultLibraryItem, WhiteboardState } from './whiteboardTypes'
 import {
   createDefaultWhiteboardState,
   createImageAssetForCanvas,
@@ -36,6 +33,7 @@ import {
   serializeWhiteboardState,
 } from './whiteboardState'
 import { AspectRatioPopover, TOOL_ITEMS, ToolIconButton } from './WhiteboardToolbarControls'
+import { WhiteboardLibraryPanel, type WhiteboardLibraryTabKey } from './WhiteboardLibraryPanel'
 import { blobToDataUrl, removeBackgroundBlob } from '../../../../lib/removeBackground'
 import {
   ASSET_DRAG_MIME,
@@ -49,15 +47,6 @@ import {
   type AssetPanelItem,
   type LibraryDragPayload,
 } from './whiteboardStateOps'
-
-export type WhiteboardResultLibraryItem = {
-  id: string
-  nodeId: string
-  name: string
-  url: string
-  width?: number
-  height?: number
-}
 
 export type WhiteboardDrawingToolHandle = {
   captureViewportFile: (filename?: string) => Promise<File>
@@ -75,8 +64,6 @@ type WhiteboardDrawingToolProps = {
   focusResultsOnScreenshot?: boolean
   onScreenshot?: () => void
 }
-
-type LibraryTabKey = 'board' | 'results'
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -134,7 +121,7 @@ const WhiteboardDrawingTool = React.forwardRef<WhiteboardDrawingToolHandle, Whit
     const [removeBgTargetId, setRemoveBgTargetId] = React.useState<string | null>(null)
     const [removeBgProgress, setRemoveBgProgress] = React.useState<number | null>(null)
     const [assetDragOver, setAssetDragOver] = React.useState(false)
-    const [activeLibraryTab, setActiveLibraryTab] = React.useState<LibraryTabKey>('board')
+    const [activeLibraryTab, setActiveLibraryTab] = React.useState<WhiteboardLibraryTabKey>('board')
     const leaferCanvasRef = React.useRef<LeaferCanvasHandle | null>(null)
     const fullscreenPanelRef = React.useRef<HTMLDivElement | null>(null)
     const fileInputRef = React.useRef<HTMLInputElement | null>(null)
@@ -665,147 +652,20 @@ const WhiteboardDrawingTool = React.forwardRef<WhiteboardDrawingToolHandle, Whit
           </section>
 
           {!isFullscreen ? (
-          <aside
-            className="flex h-full min-h-0 min-w-[320px] shrink-0 flex-col overflow-hidden bg-nomi-paper"
-            style={{ flexBasis: 'clamp(340px, 28vw, 500px)' }}
-          >
-            <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="flex min-h-11 shrink-0 items-center gap-2 border-b border-nomi-line-soft px-3 text-body-sm font-medium text-nomi-ink">
-                <IconPhoto size={16} stroke={1.7} className="shrink-0 text-nomi-ink-40" />
-                <span className="min-w-0 flex-1 truncate">素材库</span>
-                <div className="ml-auto inline-flex shrink-0 rounded-nomi-sm border border-nomi-line bg-nomi-ink-05 p-0.5">
-                  {([
-                    { key: 'board' as const, label: '画板', count: boardLibraryItemCount },
-                    { key: 'results' as const, label: '结果', count: resultItems.length },
-                  ]).map((tab) => {
-                    const active = activeLibraryTab === tab.key
-                    return (
-                      <button
-                        key={tab.key}
-                        type="button"
-                        className={cn(
-                          'inline-flex h-7 items-center gap-1 rounded-nomi-sm px-2 text-caption transition-colors',
-                          active ? 'bg-nomi-paper font-medium text-nomi-ink shadow-nomi-sm' : 'text-nomi-ink-60 hover:text-nomi-ink',
-                        )}
-                        aria-pressed={active}
-                        onClick={() => setActiveLibraryTab(tab.key)}
-                      >
-                        <span>{tab.label}</span>
-                        <span className="text-micro text-nomi-ink-40">{tab.count}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-              <div className="grid min-h-0 content-start gap-2 overflow-y-auto p-2.5">
-                {activeLibraryTab === 'board' && boardLibraryItemCount === 0 ? (
-                  <div className="grid min-h-[120px] place-items-center rounded-nomi border border-dashed border-nomi-line px-3 text-center text-caption text-nomi-ink-40">
-                    画板中的图片节点结果会显示在这里
-                  </div>
-                ) : null}
-                {activeLibraryTab === 'results' && resultItems.length === 0 ? (
-                  <div className="grid min-h-[120px] place-items-center rounded-nomi border border-dashed border-nomi-line px-3 text-center text-caption text-nomi-ink-40">
-                    连接的图片节点结果会显示在这里
-                  </div>
-                ) : null}
-                {activeLibraryTab === 'board' && boardLibraryItemCount > 0 ? (
-                  <div className="grid grid-cols-3 gap-2">
-                    {assetPanelItems.map((item) => {
-                      const active = activeCanvasObject?.kind === 'asset' && activeCanvasObject.id === item.target.id
-                      return (
-                        <div
-                          key={item.id}
-                          draggable
-                          className={cn(
-                            'group overflow-hidden rounded-nomi-sm border bg-nomi-paper text-caption shadow-nomi-sm',
-                            'cursor-grab active:cursor-grabbing',
-                            active
-                              ? 'border-nomi-accent bg-nomi-accent-soft text-nomi-accent'
-                              : 'border-nomi-line-soft text-nomi-ink-80 hover:border-nomi-line hover:bg-nomi-ink-05',
-                          )}
-                          title="拖到画板中复制"
-                          onDragStart={(event) => handleAssetDragStart(event, { source: 'board', assetId: item.target.id })}
-                          onDragEnd={() => setAssetDragOver(false)}
-                        >
-                          <button
-                            type="button"
-                            className="block w-full bg-transparent text-left text-inherit"
-                            onClick={() => selectAssetPanelItem(item)}
-                          >
-                            <span className="block aspect-[4/3] overflow-hidden bg-nomi-ink-05">
-                              <img
-                                className={cn('h-full w-full object-cover', !item.visible && 'opacity-35 grayscale')}
-                                src={item.url}
-                                alt=""
-                                draggable={false}
-                              />
-                            </span>
-                            <span className="block min-w-0 truncate px-1.5 py-1 text-micro">{item.name}</span>
-                          </button>
-                          <div className="flex items-center justify-between border-t border-nomi-line-soft px-1 py-0.5">
-                            <button
-                              type="button"
-                              className="grid size-6 place-items-center rounded-nomi-sm text-nomi-ink-40 hover:bg-nomi-paper hover:text-nomi-ink"
-                              aria-label={`${item.visible ? '隐藏' : '显示'}${item.name}`}
-                              onClick={() => toggleLayerVisibility(item.layerId)}
-                            >
-                              {item.visible ? <IconEye size={13} stroke={1.7} /> : <IconEyeOff size={13} stroke={1.7} />}
-                            </button>
-                            <span className="min-w-0 truncate px-1 text-micro text-nomi-ink-40">
-                              {item.width} x {item.height}
-                            </span>
-                            <button
-                              type="button"
-                              className="grid size-6 place-items-center rounded-nomi-sm text-nomi-ink-40 hover:bg-workbench-danger-soft hover:text-workbench-danger disabled:opacity-30"
-                              disabled={item.locked}
-                              aria-label={`删除${item.name}`}
-                              onClick={() => deleteCanvasObject(item.target)}
-                            >
-                              <IconTrash size={12} stroke={1.7} />
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                    {canvasImageItems.map((item) => (
-                      <div
-                        key={item.id}
-                        draggable
-                        className="group overflow-hidden rounded-nomi-sm border border-nomi-line-soft bg-nomi-paper text-caption text-nomi-ink-80 shadow-nomi-sm cursor-grab hover:border-nomi-line hover:bg-nomi-ink-05 active:cursor-grabbing"
-                        title="拖到画板中添加"
-                        onDragStart={(event) => handleAssetDragStart(event, { source: 'result', itemId: item.id })}
-                        onDragEnd={() => setAssetDragOver(false)}
-                      >
-                        <span className="block aspect-[4/3] overflow-hidden bg-nomi-ink-05">
-                          <img className="h-full w-full object-cover" src={item.url} alt="" draggable={false} />
-                        </span>
-                        <span className="block min-w-0 truncate px-1.5 py-1 text-micro">{item.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-                {activeLibraryTab === 'results' && resultItems.length > 0 ? (
-                  <div className="grid grid-cols-3 gap-2">
-                    {resultItems.map((item) => (
-                      <div
-                        key={item.id}
-                        draggable
-                        className="group overflow-hidden rounded-nomi-sm border border-nomi-line-soft bg-nomi-paper text-caption text-nomi-ink-80 shadow-nomi-sm cursor-grab hover:border-nomi-line hover:bg-nomi-ink-05 active:cursor-grabbing"
-                        title="拖到画板中添加"
-                        onDragStart={(event) => handleAssetDragStart(event, { source: 'result', itemId: item.id })}
-                        onDragEnd={() => setAssetDragOver(false)}
-                      >
-                        <span className="block aspect-[4/3] overflow-hidden bg-nomi-ink-05">
-                          <img className="h-full w-full object-cover" src={item.url} alt="" draggable={false} />
-                        </span>
-                        <span className="block min-w-0 truncate px-1.5 py-1 text-micro">{item.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </section>
-          </aside>
+            <WhiteboardLibraryPanel
+              activeObject={activeCanvasObject}
+              activeTab={activeLibraryTab}
+              assetPanelItems={assetPanelItems}
+              boardLibraryItemCount={boardLibraryItemCount}
+              canvasImageItems={canvasImageItems}
+              resultItems={resultItems}
+              onActiveTabChange={setActiveLibraryTab}
+              onAssetDragEnd={() => setAssetDragOver(false)}
+              onAssetDragStart={handleAssetDragStart}
+              onDeleteTarget={deleteCanvasObject}
+              onSelectAsset={selectAssetPanelItem}
+              onToggleLayerVisibility={toggleLayerVisibility}
+            />
           ) : null}
         </div>
         <input

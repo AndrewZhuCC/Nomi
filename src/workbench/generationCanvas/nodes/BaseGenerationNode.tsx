@@ -2,11 +2,9 @@ import React from 'react'
 import {
   IconCheck,
   IconCopy,
-  IconGripVertical,
   IconInfoCircle,
   IconLayoutGrid,
   IconMaximize,
-  IconPlus,
   IconUpload,
 } from '@tabler/icons-react'
 import ProvenancePanel from './ProvenancePanel'
@@ -33,6 +31,8 @@ import {
   STRIPED_BG_CLASS,
 } from './render/CardCommon'
 import PanoramaUploadFallback from './PanoramaUploadFallback'
+import { MagneticConnectionHandle } from './NodeConnectionHandles'
+import { SideTimelineDragHandle, TimelineNotchDragHandle } from './NodeTimelineDragHandles'
 import { cn } from '../../../utils/cn'
 import { NomiImage } from '../../../design/media'
 import { persistNodeImageFile } from '../adapters/persistNodeImage'
@@ -61,7 +61,7 @@ import PanoramaViewer, { type PanoramaScreenshot } from './PanoramaViewer'
 import { getGenerationNodeExecutionKind, isImageLikeGenerationNodeKind } from '../model/generationNodeKinds'
 import { applyFixationMakeup } from '../fixation/buildFixationNode'
 import { TechnicalReviewBadge } from './TechnicalReviewBadge'
-import { canDragGenerationNodeToTimeline, TIMELINE_DRAG_HANDLE_LABEL } from '../model/timelineDragAffordance'
+import { canDragGenerationNodeToTimeline } from '../model/timelineDragAffordance'
 import {
   STATUS_LABEL,
   RESIZE_DIRECTIONS,
@@ -80,105 +80,6 @@ export type BaseGenerationNodeProps = {
   appear?: boolean
 }
 const Scene3DEditor = lazyWithChunkBoundary('3D 场景编辑器', () => import('./Scene3DEditor')) // A5：chunk 失败只降级本卡
-
-const MAGNETIC_HANDLE_ICON_RADIUS = 18
-
-function clampMagneticHandlePosition(value: number, max: number): number {
-  return Math.min(
-    Math.max(value, MAGNETIC_HANDLE_ICON_RADIUS),
-    Math.max(MAGNETIC_HANDLE_ICON_RADIUS, max - MAGNETIC_HANDLE_ICON_RADIUS),
-  )
-}
-
-function updateMagneticHandlePosition(event: React.PointerEvent<HTMLButtonElement>): void {
-  const handle = event.currentTarget
-  const rect = handle.getBoundingClientRect()
-  const localWidth = handle.offsetWidth || rect.width || 1
-  const localHeight = handle.offsetHeight || rect.height || 1
-  const localX = rect.width > 0 ? (event.clientX - rect.left) * (localWidth / rect.width) : localWidth / 2
-  const localY = rect.height > 0 ? (event.clientY - rect.top) * (localHeight / rect.height) : localHeight / 2
-  handle.style.setProperty('--connection-handle-x', `${clampMagneticHandlePosition(localX, localWidth)}px`)
-  handle.style.setProperty('--connection-handle-y', `${clampMagneticHandlePosition(localY, localHeight)}px`)
-  handle.dataset.following = 'true'
-}
-
-function resetMagneticHandlePosition(event: React.PointerEvent<HTMLButtonElement>): void {
-  const handle = event.currentTarget
-  handle.style.setProperty('--connection-handle-x', handle.dataset.homeX || '50%')
-  handle.style.setProperty('--connection-handle-y', '50%')
-  handle.removeAttribute('data-following')
-}
-
-type MagneticConnectionHandleProps = {
-  side: ConnectionAnchorSide
-  active: boolean
-  pendingTarget: boolean
-  onStart: (event: React.PointerEvent<HTMLElement>, side: ConnectionAnchorSide) => void
-  onComplete: (event: React.MouseEvent<HTMLButtonElement>) => void
-}
-
-function MagneticConnectionHandle({
-  side,
-  active,
-  pendingTarget,
-  onStart,
-  onComplete,
-}: MagneticConnectionHandleProps): JSX.Element {
-  const homeX = side === 'left' ? 'calc(100% - 34px)' : '34px'
-  return (
-    <button
-      type="button"
-      className={cn(
-        'group/magnetic pointer-events-auto absolute top-1/2 z-[4]',
-        'h-[min(168px,calc(100%+28px))] w-28 -translate-y-1/2',
-        'touch-none cursor-crosshair border-0 bg-transparent p-0',
-        side === 'left' ? 'left-[-112px]' : 'right-[-112px]',
-      )}
-      aria-label={pendingTarget ? '连接到此节点' : '从此节点开始连线'}
-      data-active={active ? 'true' : 'false'}
-      data-home-x={homeX}
-      data-side={side}
-      style={
-        {
-          '--connection-handle-x': homeX,
-          '--connection-handle-y': '50%',
-        } as React.CSSProperties
-      }
-      onPointerMove={updateMagneticHandlePosition}
-      onPointerLeave={resetMagneticHandlePosition}
-      onPointerCancel={resetMagneticHandlePosition}
-      onPointerDown={(event) => {
-        if (pendingTarget) {
-          event.stopPropagation()
-          return
-        }
-        onStart(event, side)
-      }}
-      onClick={(event) => {
-        event.stopPropagation()
-        if (pendingTarget) onComplete(event)
-      }}
-    >
-      <span
-        className={cn(
-          'pointer-events-none absolute left-[var(--connection-handle-x)] top-[var(--connection-handle-y)]',
-          'grid size-9 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full',
-          'border-2 border-[color-mix(in_srgb,var(--workbench-muted-soft)_72%,transparent)]',
-          'bg-[color-mix(in_oklch,var(--nomi-paper)_82%,transparent)] text-workbench-muted opacity-[0.78]',
-          'shadow-[0_10px_26px_rgba(18,24,38,0.18),0_0_0_1px_color-mix(in_srgb,var(--nomi-ink)_8%,transparent)]',
-          'transition-[left,top,opacity,transform,border-color,color] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)]',
-          'group-data-[following=true]/magnetic:transition-[opacity,transform,border-color,color] group-data-[following=true]/magnetic:duration-[120ms]',
-          'group-hover/magnetic:border-workbench-accent group-hover/magnetic:text-workbench-accent group-hover/magnetic:opacity-100',
-          'group-focus-visible/magnetic:border-workbench-accent group-focus-visible/magnetic:text-workbench-accent group-focus-visible/magnetic:opacity-100',
-          'group-data-[active=true]/magnetic:border-workbench-accent group-data-[active=true]/magnetic:text-workbench-accent group-data-[active=true]/magnetic:opacity-100',
-        )}
-        aria-hidden="true"
-      >
-        <IconPlus size={22} stroke={1.8} />
-      </span>
-    </button>
-  )
-}
 const Model3DViewer = lazyWithChunkBoundary('3D 模型预览', () => import('./model3d/Model3DViewer')) // 生成出的 .glb 卡内可旋转预览（R3F）
 
 function BaseGenerationNodeImpl({
@@ -823,81 +724,18 @@ function BaseGenerationNodeImpl({
       ) : null}
 
       {showTimelineNotch ? (
-        <div
-          role="button"
-          tabIndex={0}
-          className={cn(
-            'absolute left-1/2 top-0 z-[9] inline-flex h-[22px] w-[76px] items-center justify-center overflow-hidden px-2',
-            '-translate-x-1/2 translate-y-[-8px] scale-[0.96] origin-top rounded-b-[18px]',
-            'pointer-events-none border border-t-0 border-[var(--nomi-line-soft)] bg-nomi-paper text-nomi-ink-60 opacity-0 shadow-nomi-sm',
-            'font-[inherit] text-micro font-medium cursor-grab active:cursor-grabbing',
-            'will-change-[transform,opacity] transition-[opacity,transform,color,background,box-shadow] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)]',
-            'group-hover/node:pointer-events-auto group-hover/node:translate-y-0 group-hover/node:scale-100 group-hover/node:opacity-100',
-            'group-focus-within/node:pointer-events-auto group-focus-within/node:translate-y-0 group-focus-within/node:scale-100 group-focus-within/node:opacity-100',
-            'hover:bg-nomi-paper hover:text-nomi-ink hover:shadow-nomi-md',
-            'focus-visible:bg-nomi-paper focus-visible:text-nomi-ink focus-visible:shadow-nomi-md',
-            'active:translate-y-0 active:scale-[0.98]',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--workbench-accent)] focus-visible:ring-offset-2',
-          )}
-          aria-label={TIMELINE_DRAG_HANDLE_LABEL}
-          title={`${TIMELINE_DRAG_HANDLE_LABEL}（长按拖拽）`}
-          draggable
-          onClick={(event) => event.stopPropagation()}
+        <TimelineNotchDragHandle
+          onAddAtPlayhead={handleAddToTimelineAtPlayhead}
           onDragStart={handleTimelineDragStart}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter' && event.key !== ' ') return
-            event.preventDefault()
-            handleAddToTimelineAtPlayhead(event)
-          }}
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <IconGripVertical size={13} stroke={1.8} aria-hidden="true" />
-          <span className="sr-only">{TIMELINE_DRAG_HANDLE_LABEL}</span>
-        </div>
+        />
       ) : null}
 
       {isGenerating && !isRemoveBackgroundPending ? <GeneratingOverlay /> : null}
       {showSideTimelineDrag ? (
-        <div
-          role="button"
-          tabIndex={0}
-          className={cn(
-            'generation-canvas-v2-node__timeline-drag group',
-            'absolute top-1/2 right-[-42px] z-[7]',
-            'inline-flex items-center justify-center',
-            'w-8 h-12 m-0 p-0 border border-nomi-line rounded-full',
-            'bg-nomi-paper/[0.94] text-nomi-ink-60 font-[inherit]',
-            'cursor-grab backdrop-blur-[10px] shadow-nomi-md',
-            '-translate-y-1/2 transition-[transform,color,background,box-shadow] duration-150 ease-out',
-            'active:cursor-grabbing active:scale-[0.96]',
-            'hover:bg-nomi-paper hover:text-nomi-ink hover:shadow-nomi-lg',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--workbench-accent)] focus-visible:ring-offset-2',
-          )}
-          aria-label={TIMELINE_DRAG_HANDLE_LABEL}
-          title={TIMELINE_DRAG_HANDLE_LABEL}
-          draggable
-          onClick={handleAddToTimelineAtPlayhead}
+        <SideTimelineDragHandle
+          onAddAtPlayhead={handleAddToTimelineAtPlayhead}
           onDragStart={handleTimelineDragStart}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter' && event.key !== ' ') return
-            event.preventDefault()
-            handleAddToTimelineAtPlayhead(event)
-          }}
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <IconGripVertical size={18} stroke={1.6} aria-hidden="true" />
-          <span
-            className={cn(
-              'pointer-events-none absolute left-[calc(100%+8px)] top-1/2 -translate-y-1/2',
-              'whitespace-nowrap rounded-full px-2.5 py-1.5',
-              'bg-nomi-ink text-nomi-paper text-micro font-medium leading-none',
-              'opacity-0 translate-x-[-4px] transition-[opacity,transform] duration-150',
-              'group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0',
-            )}
-          >
-            {TIMELINE_DRAG_HANDLE_LABEL}
-          </span>
-        </div>
+        />
       ) : null}
 
       {/* composer：生成类节点 + **单选**时浮出。多选(框选)一律不挂——否则每个选中节点都弹自己的

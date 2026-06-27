@@ -13,3 +13,12 @@ export type WhiteboardInitialImage = {
   url: string
   aspectRatio: AspectRatioKey
 }
+
+export type WhiteboardResultLibraryItem = {
+  id: string
+  nodeId: string
+  name: string
+  url: string
+  width?: number
+  height?: number
+}

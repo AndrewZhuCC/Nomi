@@ -26,7 +26,7 @@ const SCAN_DIRS = ["src", "electron"];
 // 改小某个数 = 你成功瘦身后锁定的新上限。新增条目应经人工评审。
 const ALLOWLIST = {
   "electron/runtime.ts": 634, // extractAssetUrl 下沉 tasks/assetUrlExtract.ts 给 3D asset 类型腾空间（2026-06-27）
-  "src/workbench/generationCanvas/nodes/BaseGenerationNode.tsx": 823, // panorama 上传回退抽 PanoramaUploadFallback 给 model3d 预览腾空间（2026-06-27）
+  "src/workbench/generationCanvas/nodes/BaseGenerationNode.tsx": 798, // 抽 NodeConnectionHandles + NodeTimelineDragHandles 锁住瘦身（2026-06-27）
   // PR#21 白板节点引入（2026-06-25）：WhiteboardDrawingTool（1032）与 WhiteboardLeaferCanvas（3406）两巨壳
   // 已按 Rule 9 全部拆完、双双出白名单。LeaferCanvas → whiteboardCanvasTypes/Export/NodeOps/Geometry 四纯模块
   // + whiteboardSceneRender（渲染树）+ useWhiteboardDrawing/BoxSelection/SelectionActions/SceneSync 四交互 hook，
