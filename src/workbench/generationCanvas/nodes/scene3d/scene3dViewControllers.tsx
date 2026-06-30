@@ -17,6 +17,7 @@ import {
   clearMovementKeyState,
   eulerToArray,
   findSceneObjectByRuntimeId,
+  followOrbitPolarBounds,
   hasActiveMovementKey,
   isEditableKeyboardTarget,
   isMovementCode,
@@ -154,10 +155,16 @@ export function Scene3DControls({
   }, [selectionActive])
 
   // #3：换/进/退跟随目标 → 清基线（下一帧重建 lastPos，不把进入瞬间的位置当增量平移相机）。
+  // 并 update() 一次：进入跟随时若相机本就在带外极端俯仰，靠这帧 update 让 OrbitControls 立即夹回带内
+  // （否则要等角色移动那帧才触发 update，停着拖会先漂出再回正）。
   React.useLayoutEffect(() => {
     followObjectIdRef.current = followObjectId ?? null
     followLastPosRef.current = null
-  }, [followObjectId])
+    if (!freeLook && orbitRef.current) {
+      orbitRef.current.update()
+      invalidate()
+    }
+  }, [followObjectId, freeLook, invalidate])
 
   // 角色操控态：相机 WASD 让位给角色，彻底不接走位键（杜绝两条 WASD 路径争用）。
   React.useLayoutEffect(() => {
@@ -363,6 +370,10 @@ export function Scene3DControls({
     invalidate()
   })
 
+  // #3 续：跟随角色（操控/录制绕拍）时夹 orbit 俯仰角到电影构图带 → 猛拖竖向主体不出框；
+  // 横向方位角不夹（绕圈手感不变）；非跟随态回 [0,π] 默认无约束（退出即自由 orbit，零回归）。
+  const polarBounds = followOrbitPolarBounds(!freeLook && Boolean(followObjectId))
+
   return (
     <>
       <OrbitControls
@@ -371,6 +382,8 @@ export function Scene3DControls({
         makeDefault={!freeLook}
         enableDamping
         dampingFactor={0.15}
+        minPolarAngle={polarBounds.min}
+        maxPolarAngle={polarBounds.max}
         mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: null as unknown as THREE.MOUSE }}
       />
       {freeLook ? (

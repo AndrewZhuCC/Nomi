@@ -105,6 +105,16 @@ export const CROWD_INSTANCED_GEOMETRY_SEGMENTS = 12
 export const CROWD_FOOT_RING_SEGMENTS = 48
 export const FREE_LOOK_ROTATION_SPEED = 0.003
 export const WHEEL_TRAVEL_SPEED = 0.0045
+// #3 续：录制/操控态绕拍角色时，给 OrbitControls 俯仰角(polar angle)夹一个「电影构图带」。
+// OrbitControls polar：0=正俯视(头顶)、π/2=水平平视、π=正仰视(脚底)。横向方位角(绕圈)不夹=创作目标手感不变；
+// 只夹竖向两极——猛拖向下会把相机绕到角色下方仰视(polar→π)→角色被顶出画面上边/只剩腿(用户实测痛点)；
+// 反向猛拖向上会绕到正俯视(polar→0)→角色缩成头顶一点。夹在「中高俯角~近水平仰角」之间，
+// 主体始终留在画面内。退出操控/录制 = 不传这俩界(undefined)→ OrbitControls 默认 [0,π] 无约束(零回归自由 orbit)。
+// 取值是从「保住站立主体取景」推的：上界 ≈ 26°(从竖直起算的中高俯角，不到正俯视鸟瞰)、
+// 下界 ≈ 100°(略过水平的低角度，留一点仰拍英雄镜空间，但远不到贴地正仰视的脚底视角)。
+// 痛点正是「猛拖向下把相机绕到角色下方仰视(polar→π)→角色顶出上边/只剩腿」，这条下界把它夹死。
+export const FOLLOW_ORBIT_MIN_POLAR_ANGLE = THREE.MathUtils.degToRad(26)
+export const FOLLOW_ORBIT_MAX_POLAR_ANGLE = THREE.MathUtils.degToRad(100)
 export const CAMERA_LENS_DEPTH_MAX_FACTOR = 0.85
 export const MANNEQUIN_MODEL_URL = new URL('../../../../assets/x-bot.glb', import.meta.url).href
 // 假人 locomotion 动画 clip（idle/walk/run 等）的来源。和 x-bot 同骨架（mixamorig: 带冒号），

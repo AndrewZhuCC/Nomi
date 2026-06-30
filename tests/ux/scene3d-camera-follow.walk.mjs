@@ -114,17 +114,23 @@ try {
   }
 
   // 走 + orbit 多段，逐段截图 + 采角色 NDC（|x|,|y| < ~0.85 视为「在画面内且不贴边」）。
+  // 复现用户实测痛点：按住 W 走，同时**反复带强向下分量猛拖 orbit**（每段竖向 -180px，模拟用户
+  // 上下大幅拖拽要看角色）。修前竖向无约束 → 俯仰累积漂移把角色顶出画面上边/只剩腿；
+  // 修后 polar 夹在构图带内 → 角色全程留框。横向也带分量（绕圈，创作目标手感须不变）。
   const ndcSamples = []
   await win.keyboard.down('KeyW')
   for (let i = 0; i < 6; i += 1) {
     await win.waitForTimeout(600)
-    // 拖鼠标在画布内 orbit（每段不同方向，模拟用户绕看角色）。
+    // 拖鼠标在画布内 orbit：横向交替绕圈 + **每段强向下拖**（-180px 竖向，比之前 +30 大得多，
+    // 专打竖向俯仰累积这个根因）。
     if (box) {
       const cx = box.x + box.width * 0.5
       const cy = box.y + box.height * 0.5
-      await win.mouse.move(cx, cy)
+      // 强向下拖：从画布偏上一路拖到偏下（屏幕 y 增大 = 向下分量），每段 ~+180px，反复累积俯仰；
+      // 横向交替制造绕圈分量（创作目标手感须不变）。
+      await win.mouse.move(cx, cy - 90)
       await win.mouse.down()
-      await win.mouse.move(cx + (i % 2 === 0 ? 120 : -120), cy + 30, { steps: 6 })
+      await win.mouse.move(cx + (i % 2 === 0 ? 110 : -110), cy + 90, { steps: 8 })
       await win.mouse.up()
     }
     await win.waitForTimeout(200)

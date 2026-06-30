@@ -16,6 +16,8 @@ import {
   CAMERA_LENS_DEPTH_MAX_FACTOR,
   CLIPBOARD_PASTE_OFFSET,
   CROWD_MAX_AXIS,
+  FOLLOW_ORBIT_MAX_POLAR_ANGLE,
+  FOLLOW_ORBIT_MIN_POLAR_ANGLE,
   MANNEQUIN_DEFAULT_POSE,
   MANNEQUIN_DEFAULT_SCALE,
   MANNEQUIN_REST_ROTATION_KEY,
@@ -659,6 +661,15 @@ export function numberInputValue(value: number): string {
 
 export function isMovementCode(code: string): code is Scene3DMovementCode {
   return MOVEMENT_CODES.has(code)
+}
+
+// #3 续：解析 OrbitControls 在「是否跟随角色」下该用的俯仰角(polar angle)上下界。
+// 跟随态(操控/录制绕拍角色) → 返回电影构图带 [min,max]，夹住竖向两极（横向方位角不夹=绕圈手感不变），
+// 主体猛拖竖向也留在画面内。非跟随态 → 返回 [0, π] = OrbitControls 默认无约束（退出即恢复自由 orbit，零回归）。
+// 纯函数（无副作用、可测）：following 由调用方按 !freeLook && followObjectId 判定。
+export function followOrbitPolarBounds(following: boolean): { min: number; max: number } {
+  if (!following) return { min: 0, max: Math.PI }
+  return { min: FOLLOW_ORBIT_MIN_POLAR_ANGLE, max: FOLLOW_ORBIT_MAX_POLAR_ANGLE }
 }
 
 export function clearMovementKeyState(keys: Record<Scene3DMovementCode, boolean>): void {
