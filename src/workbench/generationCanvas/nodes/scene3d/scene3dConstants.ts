@@ -107,6 +107,22 @@ export const FREE_LOOK_ROTATION_SPEED = 0.003
 export const WHEEL_TRAVEL_SPEED = 0.0045
 export const CAMERA_LENS_DEPTH_MAX_FACTOR = 0.85
 export const MANNEQUIN_MODEL_URL = new URL('../../../../assets/x-bot.glb', import.meta.url).href
+// 假人 locomotion 动画 clip（idle/walk/run 等）的来源。和 x-bot 同骨架（mixamorig: 带冒号），
+// 这里只用它的 animations，几何/蒙皮仍来自 x-bot。建议后续把它剥成纯动画（去掉冗余 mesh）减体积。
+export const MANNEQUIN_ANIMATION_URL = new URL('../../../../assets/mannequin-animations.glb', import.meta.url).href
+
+// possess 态自动 locomotion：clip 名（须与 mannequin-animations.glb 内 clip 名逐字一致）。
+export type Scene3DLocomotionClip = 'idle' | 'walk' | 'run'
+export const LOCOMOTION_CLIP_IDLE: Scene3DLocomotionClip = 'idle'
+export const LOCOMOTION_CLIP_WALK: Scene3DLocomotionClip = 'walk'
+export const LOCOMOTION_CLIP_RUN: Scene3DLocomotionClip = 'run'
+// 由「角色地面速度(米/秒)」分桶到 locomotion clip 的阈值。低于 walk 阈值 = 站立(idle)；
+// 超过 run 阈值 = 奔跑。值贴现有走位基速（WALK_SPEED 2.6 × SPEED_SCALE 0.42 ≈ 1.09 m/s 满速），
+// 故 run 门设在满速之上一截，需配速度滑块调高才触发；walk 门设在「确实在动」的微小正速度之上。
+export const LOCOMOTION_WALK_SPEED_THRESHOLD = 0.05
+export const LOCOMOTION_RUN_SPEED_THRESHOLD = 3.2
+// crossFade 时长(秒)：clip 切换的平滑过渡。
+export const LOCOMOTION_CROSSFADE_SECONDS = 0.22
 export const SCENE3D_LIGHT_BACKGROUND = '#f6f3ee'
 export const SCENE3D_DARK_BACKGROUND = '#111827'
 export const SPHERE_RADIUS_DEFAULT = 50

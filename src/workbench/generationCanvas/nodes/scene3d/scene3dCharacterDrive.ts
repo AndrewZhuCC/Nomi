@@ -1,5 +1,13 @@
 import * as THREE from 'three'
-import type { Scene3DMovementCode } from './scene3dConstants'
+import {
+  LOCOMOTION_CLIP_IDLE,
+  LOCOMOTION_CLIP_RUN,
+  LOCOMOTION_CLIP_WALK,
+  LOCOMOTION_RUN_SPEED_THRESHOLD,
+  LOCOMOTION_WALK_SPEED_THRESHOLD,
+  type Scene3DLocomotionClip,
+  type Scene3DMovementCode,
+} from './scene3dConstants'
 import type { Scene3DVector3 } from './scene3dTypes'
 
 // 角色操控（possess）纯运动学层。和相机 fly（scene3dViewControllers）是两条独立路径：
@@ -78,4 +86,14 @@ export function applyGroundTranslation(
     Number(groundY.toFixed(4)),
     Number((position[2] + deltaZ).toFixed(4)),
   ]
+}
+
+// 由「角色当前地面速度(米/秒，非负)」分桶到 locomotion 动画 clip：
+// 微小速度以下 = idle（站着），walk 阈值~run 阈值之间 = walk，run 阈值以上 = run。
+// 纯函数、帧率无关，供 CharacterDriveController 每帧判桶（只在桶变化时才上抛切 clip）。
+export function locomotionForSpeed(speedMetersPerSec: number): Scene3DLocomotionClip {
+  const speed = Math.abs(speedMetersPerSec)
+  if (speed < LOCOMOTION_WALK_SPEED_THRESHOLD) return LOCOMOTION_CLIP_IDLE
+  if (speed >= LOCOMOTION_RUN_SPEED_THRESHOLD) return LOCOMOTION_CLIP_RUN
+  return LOCOMOTION_CLIP_WALK
 }

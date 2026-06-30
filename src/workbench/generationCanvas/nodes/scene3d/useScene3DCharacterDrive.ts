@@ -1,6 +1,6 @@
 import React from 'react'
 import { clonePoseValue } from './scene3dMath'
-import { MANNEQUIN_POSE_PRESETS } from './scene3dConstants'
+import { LOCOMOTION_CLIP_IDLE, MANNEQUIN_POSE_PRESETS } from './scene3dConstants'
 import { poseMatchesPreset } from './scene3dMath'
 import type { Scene3DObject, Scene3DSelection } from './scene3dTypes'
 
@@ -31,12 +31,17 @@ export function useScene3DCharacterDrive({
   possessedObject: Scene3DObject | undefined
   selectedMannequin: Scene3DObject | undefined
   activePresetId: string | undefined
+  locomotionClip: string
+  setLocomotionClip: (clip: string) => void
   canPossess: (selection: Scene3DSelection) => boolean
   enterPossess: (objectId: string) => void
   exitPossess: () => void
   applyActionPreset: (presetId: string) => void
 } {
   const [possessId, setPossessId] = React.useState<string | null>(null)
+  // 被操控假人当前 locomotion clip（idle/walk/run），由 CharacterDriveController 按速度上抛。
+  // 仅在「桶变化」时更新（rare），不引发渲染风暴。进/退操控都归位 idle。
+  const [locomotionClip, setLocomotionClip] = React.useState<string>(LOCOMOTION_CLIP_IDLE)
 
   const possessedObject = possessId
     ? objects.find((object) => object.id === possessId)
@@ -64,12 +69,14 @@ export function useScene3DCharacterDrive({
     setSelection({ type: 'object', id: objectId })
     setFocusId('')
     setViewLocked(true)
+    setLocomotionClip(LOCOMOTION_CLIP_IDLE)
     setPossessId(objectId)
   }, [exitCameraViewEdit, exitTrajectoryMode, objects, readOnly, setFocusId, setSelection, setViewLocked])
 
   const exitPossess = React.useCallback(() => {
     setPossessId(null)
     setViewLocked(false)
+    setLocomotionClip(LOCOMOTION_CLIP_IDLE)
   }, [setViewLocked])
 
   // 只在「被操控对象被删除/消失」时自动退出操控态。选择变化（含点空白画布清选、选中别的对象）
@@ -81,6 +88,7 @@ export function useScene3DCharacterDrive({
     if (!possessedObject) {
       setPossessId(null)
       setViewLocked(false)
+      setLocomotionClip(LOCOMOTION_CLIP_IDLE)
     }
   }, [possessId, possessedObject, setViewLocked])
 
@@ -89,6 +97,9 @@ export function useScene3DCharacterDrive({
     const preset = MANNEQUIN_POSE_PRESETS.find((candidate) => candidate.id === presetId)
     if (!preset) return
     patchObject(possessId, { pose: clonePoseValue(preset.pose) })
+    // 点静态动作（下蹲/挥手/坐下）→ 让出 locomotion 动画，显示这个静态姿势（clip='' 走 Mannequin 静态 pose 路径）。
+    // 再次 WASD 移动时 CharacterDriveController 会把 locomotion 桶上抛回 walk/run，自动接管迈腿动画。
+    setLocomotionClip('')
   }, [patchObject, possessId, readOnly])
 
   return {
@@ -96,6 +107,8 @@ export function useScene3DCharacterDrive({
     possessedObject,
     selectedMannequin,
     activePresetId,
+    locomotionClip,
+    setLocomotionClip,
     canPossess,
     enterPossess,
     exitPossess,

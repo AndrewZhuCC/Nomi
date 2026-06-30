@@ -130,6 +130,7 @@ export function SceneObjectView({
   navigationLockedRef,
   roleLabel,
   roleStartIndex,
+  activeClip,
   onSelect,
   onFocus,
   onTransformStart,
@@ -145,6 +146,9 @@ export function SceneObjectView({
   navigationLockedRef: React.MutableRefObject<boolean>
   roleLabel?: string
   roleStartIndex?: number
+  // possess 态被操控假人的 locomotion 动画 clip（idle/walk/run）。仅被操控的单个假人有值；
+  // 其余对象/群众一律 undefined → Mannequin 走静态 pose 路径，零回归。
+  activeClip?: string
   onSelect: () => void
   onFocus: () => void
   onTransformStart: () => void
@@ -259,7 +263,7 @@ export function SceneObjectView({
       {object.type === 'mannequin' ? (
         <MannequinAssetBoundary fallback={<ProceduralMannequin color={object.color || '#808080'} />}>
           <React.Suspense fallback={<ProceduralMannequin color={object.color || '#808080'} />}>
-            <Mannequin color={object.color || '#808080'} pose={object.pose} />
+            <Mannequin color={object.color || '#808080'} pose={object.pose} activeClip={activeClip} />
           </React.Suspense>
         </MannequinAssetBoundary>
       ) : object.type === 'mannequinCrowd' ? (

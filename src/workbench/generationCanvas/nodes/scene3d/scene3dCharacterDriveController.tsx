@@ -16,7 +16,9 @@ import {
   dampYaw,
   facingYawFromDirection,
   groundMoveDirection,
+  locomotionForSpeed,
 } from './scene3dCharacterDrive'
+import { LOCOMOTION_CLIP_IDLE } from './scene3dConstants'
 import type { Scene3DObject } from './scene3dTypes'
 
 const WALK_SPEED = 2.6 // 米/秒（地面走位基速，速度滑块再乘进来）
@@ -31,11 +33,15 @@ const COMMIT_INTERVAL = 0.08 // 节流提交 state 的间隔(秒)，复用 Camer
 export function CharacterDriveController({
   possessedObject,
   onObjectPatch,
+  onLocomotionChange,
 }: {
   possessedObject: Scene3DObject
   onObjectPatch: (id: string, patch: Partial<Scene3DObject>) => void
+  // 当 locomotion 桶（idle/walk/run）变化时上抛——驱动被操控假人切迈腿动画 clip。仅在桶变化时调用（非每帧）。
+  onLocomotionChange?: (clip: string) => void
 }): null {
   const { camera, scene, invalidate } = useThree()
+  const locomotionRef = React.useRef<string>(LOCOMOTION_CLIP_IDLE)
   const objectIdRef = React.useRef(possessedObject.id)
   const groundYRef = React.useRef(possessedObject.position[1])
   const yawRef = React.useRef(possessedObject.rotation[1])
@@ -111,10 +117,19 @@ export function CharacterDriveController({
       yawRef.current = dampYaw(yawRef.current, targetYaw, TURN_LAMBDA, delta)
     }
 
+    const groundSpeed = moving ? WALK_SPEED * Math.max(0.2, SPEED_SCALE) : 0
     if (moving) {
-      const step = WALK_SPEED * Math.max(0.2, SPEED_SCALE) * delta
+      const step = groundSpeed * delta
       positionRef.current.x += direction.x * step
       positionRef.current.z += direction.z * step
+    }
+
+    // locomotion 桶（idle/walk/run）：由实时地面速度分桶，仅在桶变化时上抛切动画 clip（非每帧，无渲染风暴）。
+    const nextLocomotion = locomotionForSpeed(groundSpeed)
+    if (nextLocomotion !== locomotionRef.current) {
+      locomotionRef.current = nextLocomotion
+      onLocomotionChange?.(nextLocomotion)
+      invalidate()
     }
 
     // TODO(S1 可选项·相机跟随未做)：操控态下让相机平滑跟在角色身后/上方。S1 暂不做——

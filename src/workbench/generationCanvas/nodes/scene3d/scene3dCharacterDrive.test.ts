@@ -7,7 +7,12 @@ import {
   normalizeAngle,
   dampYaw,
   applyGroundTranslation,
+  locomotionForSpeed,
 } from './scene3dCharacterDrive'
+import {
+  LOCOMOTION_RUN_SPEED_THRESHOLD,
+  LOCOMOTION_WALK_SPEED_THRESHOLD,
+} from './scene3dConstants'
 
 describe('groundMoveDirection', () => {
   it('无按键 → 零向量', () => {
@@ -136,5 +141,28 @@ describe('applyGroundTranslation', () => {
 
   it('y 始终来自 groundY，与传入 position.y 无关', () => {
     expect(applyGroundTranslation([0, 5, 0], 0, 0, 1.25)[1]).toBe(1.25)
+  })
+})
+
+describe('locomotionForSpeed', () => {
+  it('零速 / 极微速 → idle（站立）', () => {
+    expect(locomotionForSpeed(0)).toBe('idle')
+    expect(locomotionForSpeed(LOCOMOTION_WALK_SPEED_THRESHOLD - 1e-6)).toBe('idle')
+  })
+
+  it('walk 阈值（含边界）~run 阈值之间 → walk', () => {
+    expect(locomotionForSpeed(LOCOMOTION_WALK_SPEED_THRESHOLD)).toBe('walk')
+    expect(locomotionForSpeed((LOCOMOTION_WALK_SPEED_THRESHOLD + LOCOMOTION_RUN_SPEED_THRESHOLD) / 2)).toBe('walk')
+    expect(locomotionForSpeed(LOCOMOTION_RUN_SPEED_THRESHOLD - 1e-6)).toBe('walk')
+  })
+
+  it('达到/超过 run 阈值 → run', () => {
+    expect(locomotionForSpeed(LOCOMOTION_RUN_SPEED_THRESHOLD)).toBe('run')
+    expect(locomotionForSpeed(LOCOMOTION_RUN_SPEED_THRESHOLD + 10)).toBe('run')
+  })
+
+  it('负速取绝对值分桶（速度是标量大小）', () => {
+    expect(locomotionForSpeed(-LOCOMOTION_RUN_SPEED_THRESHOLD)).toBe('run')
+    expect(locomotionForSpeed(-(LOCOMOTION_WALK_SPEED_THRESHOLD + 0.01))).toBe('walk')
   })
 })

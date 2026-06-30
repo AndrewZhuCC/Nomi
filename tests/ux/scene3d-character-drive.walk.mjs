@@ -89,10 +89,32 @@ try {
   await win.screenshot({ path: path.join(outDir, 'cd-02-possessed-before-move.png') })
   log(`  ${pass.possessEntered ? '✓' : '✗'} 进入操控态（操控钮 count=${possessCount}，动作库出现=${pass.possessEntered}）`)
 
-  // 按住 W 走一段（前后截图人眼对比位移）。键盘监听在 window 上，无需点画布聚焦
-  // （点空白画布会触发 onPointerMissed 清选——不应再掉出操控，下面专门回归这条）。
+  // 把相机拖到接近水平的侧视角（possess 下 OrbitControls 仍可用，拖拽=转视角，不掉出操控），
+  // 否则默认俯视看不清腿。再滚轮拉近一点。
+  const canvasBox = await win.locator('canvas').first().boundingBox()
+  if (canvasBox) {
+    const cx0 = canvasBox.x + canvasBox.width * 0.5
+    const cy0 = canvasBox.y + canvasBox.height * 0.45
+    await win.mouse.move(cx0, cy0)
+    await win.mouse.down()
+    await win.mouse.move(cx0, cy0 - 150, { steps: 14 }) // 上拖 → 视角放平到侧视
+    await win.mouse.up()
+    await win.waitForTimeout(300)
+    await win.mouse.move(cx0, cy0)
+    await win.mouse.wheel(0, -320) // 拉近看清腿
+    await win.waitForTimeout(400)
+  }
+  await win.screenshot({ path: path.join(outDir, 'cd-walk-sideview.png') })
+
+  // 按住 W 走一段。键盘监听在 window 上，无需点画布聚焦。
+  // 关键(动画切片)：按住期间隔 ~450ms 连截 3 帧，看腿是否在不同 stride 相位（真迈腿 vs 平移滑行）。
   await win.keyboard.down('KeyW')
-  await win.waitForTimeout(1400)
+  await win.waitForTimeout(500)
+  await win.screenshot({ path: path.join(outDir, 'cd-walk-stride-a.png') })
+  await win.waitForTimeout(450)
+  await win.screenshot({ path: path.join(outDir, 'cd-walk-stride-b.png') })
+  await win.waitForTimeout(450)
+  await win.screenshot({ path: path.join(outDir, 'cd-walk-stride-c.png') })
   await win.keyboard.up('KeyW')
   await win.waitForTimeout(600)
   await win.screenshot({ path: path.join(outDir, 'cd-03-after-walk-W.png') })

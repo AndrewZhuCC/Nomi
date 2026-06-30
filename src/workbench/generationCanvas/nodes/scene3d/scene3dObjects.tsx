@@ -17,6 +17,8 @@ import {
   CROWD_INSTANCED_GEOMETRY_SEGMENTS,
   CROWD_FOOT_RING_SEGMENTS,
   MANNEQUIN_MODEL_URL,
+  MANNEQUIN_ANIMATION_URL,
+  LOCOMOTION_CROSSFADE_SECONDS,
 } from './scene3dConstants'
 import {
   vectorFromArray,
@@ -93,7 +95,86 @@ export class MannequinAssetBoundary extends React.Component<MannequinAssetBounda
   }
 }
 
-export function Mannequin({ color, pose }: { color: string; pose?: Record<string, Scene3DVector3> }): JSX.Element {
+// possess 态被操控假人的「实时迈腿」：用 three 内建 AnimationMixer 播 mannequin-animations.glb 里的
+// idle/walk/run clip 驱动骨骼（in-place 原地踏步，前进位移仍由 CharacterDriveController 直驱 group.position）。
+// 仅当 activeClip 有值时启用；为空时此 hook 不建 mixer、不每帧更新（静态 pose 路径完全不受影响 → 离屏/群众/不 possess 零回归）。
+// 切 clip 用 crossFadeTo 平滑过渡。每帧 mixer.update 后 groundMannequinModel 保证脚踩地不飘。
+function useMannequinLocomotion(
+  model: THREE.Object3D,
+  activeClip: string | undefined,
+): void {
+  // 只在真正要动画时才订阅动画 GLB（useGLTF 内部缓存，重复调用零额外加载）。
+  const animationGltf = useGLTF(MANNEQUIN_ANIMATION_URL)
+  const clips = animationGltf.animations as THREE.AnimationClip[]
+  const mixerRef = React.useRef<THREE.AnimationMixer | null>(null)
+  const currentActionRef = React.useRef<THREE.AnimationAction | null>(null)
+  const actionsRef = React.useRef<Map<string, THREE.AnimationAction>>(new Map())
+
+  // activeClip 切换时：建/取 mixer，crossFade 到目标 clip。clip 名变化频率低（仅 idle↔walk↔run 桶切），
+  // 非每帧——不会引发渲染风暴。activeClip 变 undefined（退出 possess/换对象）→ 停 mixer 回静态路径。
+  React.useEffect(() => {
+    if (!activeClip) {
+      // 不主动 reset 骨骼：Mannequin 的静态 pose useLayoutEffect 会在 activeClip 缺省时重新应用并落地。
+      currentActionRef.current = null
+      return
+    }
+    let mixer = mixerRef.current
+    if (!mixer) {
+      mixer = new THREE.AnimationMixer(model)
+      mixerRef.current = mixer
+    }
+    const actions = actionsRef.current
+    let nextAction = actions.get(activeClip)
+    if (!nextAction) {
+      const clip = clips.find((candidate) => candidate.name === activeClip)
+      if (!clip) {
+        // clip 名对不上（不该发生，constants 与 GLB 应一致）：诚实退出，回静态路径，别假装在动。
+        console.warn(`Mannequin locomotion clip not found: ${activeClip}`)
+        return
+      }
+      nextAction = mixer.clipAction(clip)
+      nextAction.setLoop(THREE.LoopRepeat, Infinity)
+      actions.set(activeClip, nextAction)
+    }
+    const prevAction = currentActionRef.current
+    if (prevAction === nextAction) return
+    nextAction.enabled = true
+    nextAction.setEffectiveWeight(1)
+    nextAction.play()
+    if (prevAction) {
+      nextAction.reset().play()
+      prevAction.crossFadeTo(nextAction, LOCOMOTION_CROSSFADE_SECONDS, false)
+    }
+    currentActionRef.current = nextAction
+  }, [activeClip, clips, model])
+
+  // 卸载（换对象/退出 possess 销毁组件）时停掉所有 action，释放 mixer。
+  React.useEffect(() => () => {
+    const mixer = mixerRef.current
+    if (mixer) mixer.stopAllAction()
+    mixerRef.current = null
+    actionsRef.current.clear()
+    currentActionRef.current = null
+  }, [])
+
+  useFrame((_, delta) => {
+    const mixer = mixerRef.current
+    if (!activeClip || !mixer || !currentActionRef.current) return
+    mixer.update(delta)
+    // clip 让脚上下起伏，每帧按蒙皮最低点重新落地，保证脚踩地不飘（基准沿用现有 groundMannequinModel 逻辑）。
+    groundMannequinModel(model as THREE.Group)
+  })
+}
+
+export function Mannequin({
+  color,
+  pose,
+  activeClip,
+}: {
+  color: string
+  pose?: Record<string, Scene3DVector3>
+  activeClip?: string
+}): JSX.Element {
   const { scene } = useGLTF(MANNEQUIN_MODEL_URL)
   const model = React.useMemo(() => {
     const skeletonClone = cloneSkeleton(scene)
@@ -135,15 +216,21 @@ export function Mannequin({ color, pose }: { color: string; pose?: Record<string
     })
   }, [color, model.materials])
 
+  // 静态 pose 路径：仅当未启用 locomotion 动画时应用逐骨姿势 + 落地。
+  // activeClip 有值时由 useMannequinLocomotion 的 mixer 接管骨骼，这里不再写骨骼（否则两条路径打架）。
   React.useLayoutEffect(() => {
+    if (activeClip) return
     applyMannequinSkeletonPose(model.object, pose)
     groundMannequinModel(model.object)
-  }, [model, pose])
+  }, [model, pose, activeClip])
+
+  useMannequinLocomotion(model.object, activeClip)
 
   return <primitive object={model.object} />
 }
 
 useGLTF.preload(MANNEQUIN_MODEL_URL)
+useGLTF.preload(MANNEQUIN_ANIMATION_URL)
 
 export function mannequinFootRingRadius(object: Scene3DObject): number {
   const scaleX = Math.max(0.08, Math.abs(object.scale[0] || 1))

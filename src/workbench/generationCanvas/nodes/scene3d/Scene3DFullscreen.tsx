@@ -643,6 +643,8 @@ export default function Scene3DFullscreen({
               cameraViewEditCamera={cameraViewEditCamera}
               trajectoryMode={trajectoryMode}
               possessedObject={characterDrive.possessedObject}
+              possessedLocomotionClip={characterDrive.locomotionClip}
+              onLocomotionChange={characterDrive.setLocomotionClip}
               onSelect={selectSceneItem}
               onFocus={focusSceneItem}
               onObjectPatch={patchObject}

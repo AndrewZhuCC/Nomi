@@ -43,6 +43,8 @@ export function SceneContent({
   cameraViewEditCamera,
   trajectoryMode,
   possessedObject,
+  possessedLocomotionClip,
+  onLocomotionChange,
   onSelect,
   onFocus,
   onObjectPatch,
@@ -80,6 +82,9 @@ export function SceneContent({
   cameraViewEditCamera?: Scene3DCamera
   trajectoryMode: boolean
   possessedObject?: Scene3DObject
+  // 被操控假人当前的 locomotion clip（idle/walk/run），由控制器算速度上抛、驱动该假人迈腿动画。
+  possessedLocomotionClip?: string
+  onLocomotionChange?: (clip: string) => void
   onSelect: (selection: Scene3DSelection) => void
   onFocus: (id: string) => void
   onObjectPatch: (id: string, patch: Partial<Scene3DObject>) => void
@@ -190,6 +195,7 @@ export function SceneContent({
           navigationLockedRef={navigationLockedRef}
           roleLabel={object.type === 'mannequin' ? mannequinRoleData.labels.get(object.id) : undefined}
           roleStartIndex={mannequinRoleData.starts.get(object.id)}
+          activeClip={possessedObject?.id === object.id ? possessedLocomotionClip : undefined}
           onSelect={() => onSelect({ type: 'object', id: object.id })}
           onFocus={() => onFocus(object.id)}
           onTransformStart={onTransformInteractionStart}
@@ -248,6 +254,7 @@ export function SceneContent({
         <CharacterDriveController
           possessedObject={possessedObject}
           onObjectPatch={onObjectPatch}
+          onLocomotionChange={onLocomotionChange}
         />
       ) : null}
       <CaptureBinder cameras={state.cameras} setApi={setCaptureApi} />
