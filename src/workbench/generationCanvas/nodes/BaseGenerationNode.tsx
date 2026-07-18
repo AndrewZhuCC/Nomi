@@ -1,5 +1,5 @@
 import React from 'react'
-import { IconCheck, IconCopy, IconDownload, IconInfoCircle, IconMaximize, IconUpload } from '@tabler/icons-react'
+import { IconCheck, IconCopy, IconDownload, IconMaximize, IconUpload } from '@tabler/icons-react'
 import ProvenancePanel from './ProvenancePanel'
 import { ShotPreviewOverlays } from './ConvertShotToVideoButton'
 import { resolveNodeRenderKind, isCardRenderKind } from './resolveRenderKind'
@@ -60,6 +60,7 @@ import {
   resolveNodeVisualSize,
 } from './nodeSizing'
 import { useNodeVideoHoverPreview } from './useNodeVideoHoverPreview'
+import { NodeInlineImageTitle, NodeResultHeaderActions } from './NodeImagePreviewActions'
 
 export type BaseGenerationNodeProps = {
   node: GenerationCanvasNode
@@ -194,6 +195,10 @@ function BaseGenerationNodeImpl({
   // C5: 文本节点走专属可编辑 body（TextDocumentNode），像 card 那样脱离图片预览。
   const isTextKind = node.kind === 'text'
   const hasResult = Boolean(node.result?.url)
+  const imagePreviewUrl = node.kind !== 'panorama' && node.result?.type === 'image'
+    ? (node.result.url || '').trim()
+    : ''
+  const canOpenImagePreview = Boolean(imagePreviewUrl)
   const mediaPreviewPriority = selected || focusFlash
   const isRemoveBackgroundPending =
     (node.status === 'queued' || node.status === 'running') && node.progress?.phase === 'remove-background'
@@ -462,24 +467,11 @@ function BaseGenerationNodeImpl({
           </button>
         ) : null}
         {hasResult && !imageStackOpen ? (
-          <button
-            type="button"
-            className={cn(
-              'ml-auto inline-grid place-items-center w-6 h-6 rounded-full',
-              'bg-nomi-paper/[0.82] text-nomi-ink-60 hover:text-nomi-ink',
-              'backdrop-blur-[8px] cursor-pointer pointer-events-auto',
-              'transition-colors duration-150',
-            )}
-            aria-label="查看生成记录"
-            title="生成记录 / Provenance"
-            onClick={(event) => {
-              event.stopPropagation()
-              setProvenanceOpen(true)
-            }}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            <IconInfoCircle size={14} stroke={1.6} />
-          </button>
+          <NodeResultHeaderActions
+            imageSrc={imagePreviewUrl}
+            title={node.title}
+            onOpenProvenance={() => setProvenanceOpen(true)}
+          />
         ) : null}
       </header>
 
@@ -625,6 +617,9 @@ function BaseGenerationNodeImpl({
           />
         )}
         <ShotPreviewOverlays node={node} selected={selected} readOnly={readOnly} shotIndex={shotIndex} hasResult={hasResult} isGenerating={isGenerating} />
+        {canOpenImagePreview && !isCardKind && !readOnly && !imageStackOpen && imageEditing.editGrid === null ? (
+          <NodeInlineImageTitle nodeId={node.id} value={node.title || ''} selected={selected} />
+        ) : null}
         {imageEditing.editGrid !== null &&
         (node.kind === 'image' || isAssetKind) &&
         node.result?.type === 'image' &&

@@ -10,6 +10,22 @@
 
 ---
 
+## 0. 执行结果
+
+| 队列 | 结果 | 根因层处理 |
+|---|---|---|
+| P0 参考视频不可见 | ✅ 完成 | 消费已持久化的 `cameraMoveVideo.url`，卡内直接播放；删除重复完成横条 |
+| P1 应用整体缩放 | ✅ 完成 | 主窗口锁定页面 zoom=1，画布业务缩放保留 |
+| P1 ComfyUI 产物未回收 | ✅ 完成 | 仅对可信同源的本地 ComfyUI 产物放行回收并本地化 |
+| P1 原稿 / 分镜找不到 | ✅ 完成 | 双工作面明确导航，两份状态独立持久化 |
+| P2 Grok 参考图错端点 | ✅ 完成 | 模型级 edit mapping + xAI JSON `/v1/images/edits` 协议 + 存量迁移 |
+| P3 图片放大 / 直接改名 | ✅ 完成 | 所有画布图片共用原图 lightbox；普通图片节点复用同一 `updateNode` 原地改名 |
+| P3 多文档 / 更多模型 | ✅ 去重关闭 | 双工作面和通用自定义模型接入已覆盖真实摩擦，不扩成 IDE、不堆过时硬编码目录 |
+
+每个代码项均有独立提交；用户可见项均由生产构建 Playwright 旅程截图人工核对。最终合并前再跑全门与最新 `origin/main` 去重。
+
+---
+
 ## 1. 分级口径
 
 | 级别 | 判断口径 | 本轮处理方式 |
@@ -106,6 +122,28 @@
 
 候选：图片点击放大、画布直接改名、多创作文档、更广的自定义模型。先查最新 main 与历史 digest 去重；已完成的不重复做。剩余项按“频次 × 对主链路节省的操作数 × 维护面”排序，每项单独走样张与实现计划。
 
+**去重结论（2026-07-18）：**
+
+1. **图片放大：真实缺口。** 标准图片结果只渲染 `DeferredNodeImage`，没有 dialog / portal / 全尺寸入口；`NomiImage.thumbnailSrc` 的注释虽写“点开大图才用原图”，但画布端没有消费这层语义。
+2. **直接改名：部分覆盖、普通图片仍缺。** `EditableNodeTitle` 已让角色/场景/道具卡面可点名修改；普通生成图、分镜图和 asset 纯图片预览没有标题编辑面，只能回侧栏。修在 `BaseGenerationNode` 的非卡片图片入口，不复制三张卡既有实现。
+3. **多创作文档：本轮 P1-3 已覆盖真实摩擦。** 微信上下文是“原稿 / 分镜方案找不到”，不是任意数量文档管理；双工作面已经保留两份状态并给出明确导航，不继续扩成 IDE。
+4. **更多自定义模型：通用能力已存在。** 当前模型接入支持手动填写 OpenAI-compatible 模型 ID，且已支持批量删除；本轮 P2 又补齐模型级参考图协议。继续硬编码更多中转站模型会制造过时目录，故不另加平行入口。Seedance 2.0 Fast 已在最新 main 的接入工作中，合并前再去重。
+
+**P3-1 实现形状（图片预览 + 原地改名，共用图片结果入口）：**
+
+- 新增单一 `NodeImageLightbox`：从画布图片节点打开原图，portal 到应用 body；背景点击 / Esc / 关闭按钮均可退出，关闭后恢复触发按钮焦点。
+- 每张有结果的图片节点右上角常显“放大预览”按钮，和既有生成记录按钮共用一行；不把整张图变成按钮，以免破坏节点拖拽、框选和连线。
+- 非卡片图片节点在图内左下显示标题胶囊：未选中时 hover 浮现、选中时常显，点击即复用 `EditableNodeTitle` 写回同一个 `updateNode` 真相源。角色/场景/道具继续使用既有标题，不重复显示。
+- 样张：`docs/design/mockups/canvas-image-preview-and-rename.html`。实现前先用真实画布密度核对按钮、标题与分镜角标不互相遮挡。
+
+**P3-1 验收：**
+
+- 普通生成图、分镜图、asset 图片与角色/场景/道具图片均有同一个放大入口；视频/音频/3D 不误显示。
+- 放大后使用原始 `result.url`，dialog 有可读标题、`aria-modal`、Esc 关闭和加载失败兜底。
+- 普通图片标题点击后原地输入，Enter / 失焦保存、Escape 撤销；重载项目后新名字仍在。
+- 图片节点仍能拖动、选中和连线；标题不遮住右下“转视频”，放大按钮不遮住左上“镜头 N”。
+- 生产构建 Playwright 真实走完：打开项目 → 进入生成 → 打开放大 → Esc 关闭 → 原地改名 → 重载验证 → 截图人工审阅。
+
 ## 3. 每项共同验收门
 
 1. **RED：** 最小回归测试必须先因目标行为缺失而失败。
@@ -126,39 +164,39 @@
 - 修改：`tests/ux/scene3d-reference-pack.walk.mjs`
 - 新增样张：`docs/design/mockups/scene3d-reference-video-preview.html`
 
-- [ ] **步骤 1：为预览优先级写红测**
+- [x] **步骤 1：为预览优先级写红测**
 
   导出纯函数 `readScene3DCardPreview(node)`，期望返回：有效 `cameraMoveVideo.url` → `video`；否则有效 `lastThumbnail` → `image`；否则 `empty`。测试必须先因函数不存在而失败。
 
-- [ ] **步骤 2：运行红测**
+- [x] **步骤 2：运行红测**
 
   运行：`pnpm exec vitest run src/workbench/generationCanvas/nodes/Scene3DEditor.test.ts`
 
   预期：FAIL，明确指出 `readScene3DCardPreview` 尚未导出。
 
-- [ ] **步骤 3：实现单一预览选择器**
+- [x] **步骤 3：实现单一预览选择器**
 
   在 `Scene3DEditor.tsx` 中从节点 meta 读取并 trim 视频 URL；视频优先，图片回退，空值不进入媒体组件。渲染视频时复用 `DeferredNodeVideo`、`buildVideoPlaybackUrl`、`diagnoseVideoPlaybackFailure`。
 
-- [ ] **步骤 4：删除完成横条的旧实现**
+- [x] **步骤 4：删除完成横条的旧实现**
 
   `Scene3DTakeStatusOverlay` 只接受 `generating`；完成态由可播放视频表达。`readTakeCaptureStatus` 仍可返回 `done` 供领域测试，但渲染入口只在 `generating` 时挂状态条。
 
-- [ ] **步骤 5：运行绿测与相关单测**
+- [x] **步骤 5：运行绿测与相关单测**
 
   运行：`pnpm exec vitest run src/workbench/generationCanvas/nodes/Scene3DEditor.test.ts src/workbench/generationCanvas/nodes/DeferredNodeMedia.test.tsx`
 
   预期：全部 PASS。
 
-- [ ] **步骤 6：补真实旅程断言**
+- [x] **步骤 6：补真实旅程断言**
 
   `scene3d-take-record.walk.mjs` 首次进入编辑器时跳过 coach marks；出片后断言 `[data-scene3d-take-video="true"]` 可见且有 `controls`，截图卡面。`scene3d-reference-pack.walk.mjs` 同样处理 coach marks，并断言首/尾帧标准 image 节点各自渲染图片。
 
-- [ ] **步骤 7：生产构建真机走查**
+- [x] **步骤 7：生产构建真机走查**
 
   运行 `pnpm build` 后执行两个 walk；人工查看“出片前/出片后/参考图”截图，确认视频控制条无遮挡、3D 入口仍在、图片节点无裂图。
 
-- [ ] **步骤 8：定向提交**
+- [x] **步骤 8：定向提交**
 
   只暂存本项的实现、测试、计划与样张文件，提交后进入 P1-1。
 
