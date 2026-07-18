@@ -96,9 +96,11 @@
 
 **已确认：** 当前 relay 层统一把 image edit 映射到 `/v1/chat/completions`，同时又对所有 relay 图片模型声明 `supportsReferenceImages: true`。这是能力声明与传输协议的系统性缺口，不是单个按钮问题。
 
-**目标：** 以模型级能力档案声明真实 image generation/edit 端点与 multipart/JSON 编码；只有档案和 transport 都支持时 UI 才暴露参考图。不为 Grok 写供应商专属 UI。
+**官方对账（2026-05-26）：** xAI Imagine 图片编辑是 `POST /v1/images/edits` + Bearer + `application/json`；单参考图用 `image:{type:"image_url",url}`，多参考图用 `images:[...]`、最多 3 张，返回 `data[*].url`。xAI 还明确说明其 edits **不是** OpenAI SDK 的 multipart 口径。来源：[xAI REST Images](https://docs.x.ai/developers/rest-api-reference/inference/images)、[xAI Image Editing](https://docs.x.ai/developers/model-capabilities/images/editing)、[xAI Multi-Image Editing](https://docs.x.ai/developers/model-capabilities/images/multi-image-editing)。
 
-**进入实现的门：** 逐项对账所接模型的真实官方 API 文档；若中继不提供 edits 协议，先诚实撤销该模型的参考图支持声明，而不是继续发错误请求。
+**修复形状：** 把 image edit 从 vendor 级单 mapping 改为模型级精确 mapping：Nano Banana 等保留 generic `chat/completions`，Grok Imagine 档案命中 JSON `images/edits`；`selectTaskMapping` 既有“精确 modelKey > generic”规则负责分流。新接入直接写精确 mapping，catalog v5→v6 给存量 Grok 自动补精确 mapping，无需删后重加；只有真实存在 edit mapping 才写 `supportsReferenceImages=true`，并把 `imageEditProtocol` 一并持久化。
+
+**验收：** 红测先证明同一中转只能落一条 generic edit mapping；修复后同站 Nano/Grok 各有精确 mapping。runtime 集成测试真实走 `runTask`，断言请求 URL 为 `/v1/images/edits`、body 有 `image` 且没有 `messages`；单图/多图造型、3 张上限、存量迁移幂等分别有纯函数/迁移测试。
 
 ### P3：效率型需求
 

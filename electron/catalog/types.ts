@@ -389,8 +389,10 @@ export function billingKindForTaskKind(kind: ProfileKind): BillingModelKind {
 /*  v5 给存量中转 image 条目补图生图能力(image_edit mapping + supportsReferenceImages + 老标准参数升级成
  *  比例/清晰度)。8c711f0c 起新接入才写这些字段，老条目此前只能「删了重加」——迁移根治，见
  *  docs/plan/2026-07-06-i2i-reference-reliability.md（L1）。只碰非内置 vendor + OpenAI 兼容形状。 */
-export type CatalogVersion = 1 | 2 | 3 | 4 | 5;
-export const CURRENT_CATALOG_VERSION: CatalogVersion = 5;
+/*  v6 把 image_edit 从 vendor 级单协议升级为 modelKey 精确协议：Grok Imagine 的 JSON /images/edits
+ *  不再误走 Nano Banana 的 /chat/completions；存量目录自动补精确 mapping。 */
+export type CatalogVersion = 1 | 2 | 3 | 4 | 5 | 6;
+export const CURRENT_CATALOG_VERSION: CatalogVersion = 6;
 
 export type CatalogState = {
   version: CatalogVersion;

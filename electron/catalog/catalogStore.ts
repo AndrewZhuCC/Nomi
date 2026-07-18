@@ -8,12 +8,13 @@ import { type ApiKeyRecord, decryptApiKeyRecord, isSafeStorageAvailable, makeApi
 import { humanizeModelKey } from "./modelLabel";
 import { applyBuiltinSeeds } from "./seedBuiltins";
 import { NEWAPI_IMAGE_EDIT_OP, NEWAPI_IMAGE_PARAM_MAP, NEWAPI_STANDARD_IMAGE_PARAMS, NEWAPI_VIDEO_PARAM_MAP } from "./newapiTransport";
+import { BUILTIN_VENDOR_KEYS, migrateRelayImageEditProtocols } from "./relayImageEditMigration";
 import type { AiSdkProviderKind, BillingModelKind, CatalogState, HttpOperation, Mapping, Model, ProfileKind, Vendor } from "./types";
 import { CURRENT_CATALOG_VERSION } from "./types";
 
 // 内置 vendor（由 seedBuiltins 管理、op 已正确）。v4 relay 迁移只碰这之外的**用户自建中转**——
 // 尤其别碰 apimart：它的 size 是比例字符串("16:9")不是像素，套 OpenAI 像素转换会发错。
-const BUILTIN_VENDOR_KEYS = new Set(["kie", "apimart", "modelscope", "volcengine", "volcengine-speech", "runninghub"]);
+export { migrateRelayImageEditProtocols } from "./relayImageEditMigration";
 
 /**
  * v3 → v4：给**用户自建 OpenAI 兼容中转**的旧图像/视频 create op 补 paramMap（铁律翻译层）。
@@ -306,6 +307,13 @@ function migrateCatalogForward(state: CatalogState): CatalogState {
     // migrateRelayImageEditCapability 注释 + docs/plan/2026-07-06-i2i-reference-reliability.md）。
     const migrated = migrateRelayImageEditCapability(s);
     s = { ...migrated.state, version: 5 };
+    writeCatalog(s);
+  }
+
+  if (s.version === 5) {
+    // v5 → v6：同一中转的不同图片模型按真实 image_edit 协议精确分流；存量 Grok 自动修复，无需删后重加。
+    const migrated = migrateRelayImageEditProtocols(s);
+    s = { ...migrated.state, version: 6 };
     writeCatalog(s);
   }
 

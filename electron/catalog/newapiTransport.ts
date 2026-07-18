@@ -89,6 +89,52 @@ export const NEWAPI_IMAGE_EDIT_OP: HttpOperation = {
   response_mapping: { image_url: "choices.0.message.images.0.url" },
 };
 
+// xAI Imagine 图片编辑官方契约（2026-05-26）：JSON POST /v1/images/edits；单图字段 image，多图字段
+// images（最多 3 张），返回 data[*].url。注意它和 OpenAI SDK 的 multipart images.edit 不是同一种线缆。
+export const XAI_JSON_IMAGE_EDIT_OP: HttpOperation = {
+  method: "POST",
+  path: "/v1/images/edits",
+  headers: JSON_HEADERS,
+  body: {
+    model: "{{model.modelKey}}",
+    prompt: "{{request.prompt}}",
+    image: "{{request.params.json_edit_image}}",
+    images: "{{request.params.json_edit_images}}",
+    aspect_ratio: "{{request.params.json_edit_aspect_ratio}}",
+    resolution: "{{request.params.xai_resolution}}",
+    response_format: "url",
+  },
+  response_mapping: { image_url: "data[*].url" },
+  paramMap: {
+    rules: [{ wire: "xai_resolution", fromMany: ["resolution"], transform: "toLowerCase" }],
+  },
+};
+
+export type NewapiImageEditProtocol = "chat-completions-image-url" | "xai-json-edits";
+export type NewapiImageEditProfile = { protocol: NewapiImageEditProtocol; operation: HttpOperation };
+
+// 模型级协议档案，而非 vendor 级开关：同一个中转站可以同时挂 Nano Banana(chat 多模态)与
+// Grok Imagine(JSON edits)。匹配只认完整模型身份/末段，避免把普通 grok 文本模型误判成图片端点。
+const XAI_JSON_EDIT_MODEL_IDS = new Set([
+  "grok-imagine-image",
+  "grok-imagine-image-quality",
+  "grok-imagine-image-pro",
+  "grok-imagine-image-2026-03-02",
+]);
+
+function normalizedModelId(modelKey: string): string {
+  const value = String(modelKey || "").trim().toLowerCase().replace(/^models\//, "");
+  return value.slice(value.lastIndexOf("/") + 1);
+}
+
+/** 中转 image_edit 按模型身份选择真实 wire；未知模型保留既有 chat 兼容口径。 */
+export function newapiImageEditProfileForModel(modelKey: string, modelAlias?: string | null): NewapiImageEditProfile {
+  const usesXaiJson = [modelKey, modelAlias].some((value) => value && XAI_JSON_EDIT_MODEL_IDS.has(normalizedModelId(value)));
+  return usesXaiJson
+    ? { protocol: "xai-json-edits", operation: XAI_JSON_IMAGE_EDIT_OP }
+    : { protocol: "chat-completions-image-url", operation: NEWAPI_IMAGE_EDIT_OP };
+}
+
 // ── 视频：异步 create（返回 task_id 进轮询）──
 export const NEWAPI_VIDEO_CREATE_OP: HttpOperation = {
   method: "POST",

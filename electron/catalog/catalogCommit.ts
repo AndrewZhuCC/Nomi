@@ -1,6 +1,6 @@
 import { firstString, isJsonRecord, nowIso, trim, type JsonRecord } from "../jsonUtils";
 import { humanizeModelKey } from "./modelLabel";
-import { newapiTransportFor } from "./newapiTransport";
+import { newapiImageEditProfileForModel, newapiTransportFor } from "./newapiTransport";
 import { consumedCanonicalKeys } from "./paramTranslate";
 import { guessModelKind } from "./modelKindHeuristic";
 import { hardenedFetchText } from "../hardenedFetch";
@@ -135,6 +135,13 @@ export function commitOnboardedModelToCatalog(payload: {
   const mappingCreate = draft.mappingCreate as HttpOperation | undefined;
   const mappingEdit = draft.mappingEdit as HttpOperation | undefined;
   const mappingQuery = draft.mappingQuery as HttpOperation | undefined;
+  const imageEditProtocol = targetKind === "image" && mappingEdit
+    ? (/\/chat\/completions$/.test(mappingEdit.path)
+        ? "chat-completions-image-url"
+        : /\/images\/edits$/.test(mappingEdit.path)
+          ? "xai-json-edits"
+          : "custom")
+    : undefined;
   // reconcile 只补「body 缺、又没被 paramMap 消费」的字段。被 paramMap 转成 wire 键的 canonical 键
   // （如 aspect_ratio/resolution → size）不该再以裸键注入 body——否则通用中转会收到无用的 aspect_ratio
   // 裸字段（严格端点可能 400）。这是 P2 根因修（不是逐 op 打补丁）。
@@ -173,9 +180,11 @@ export function commitOnboardedModelToCatalog(payload: {
       labelZh: modelDisplayName,
       kind: billingKind,
       enabled: true,
-      // image 模型声明「支持参考图」→ 节点 UI 渲染参考图槽（parameterControlModel.imageCatalogReferenceSlot）；
-      // 槽写 meta.referenceImages → 驱动 hasReference → image_edit（图生图）。通用中转图像模型现在都能图生图。
-      meta: { parameters: metaParameters, ...(billingKind === "image" ? { imageOptions: { supportsReferenceImages: true } } : {}) },
+      // 只有真实存在 image_edit mapping 才声明参考图能力；协议随模型落库，避免 UI 展示能力却只能撞错端点。
+      meta: { parameters: metaParameters, ...(billingKind === "image" ? { imageOptions: {
+        supportsReferenceImages: Boolean(mappingEdit),
+        ...(imageEditProtocol ? { imageEditProtocol } : {}),
+      } } : {}) },
       onboarding: {
         addedVia: payload.addedVia ?? "agent",
         trialId: String(outcome.trialId || ""),
@@ -195,13 +204,15 @@ export function commitOnboardedModelToCatalog(payload: {
         ...(mappingQuery ? { query: mappingQuery } : {}),
       });
     }
-    // 4b. 图生图/改图 mapping（image_edit）：图像模型专有，chat/completions 多模态。不 reconcile（chat body
-    // 是刻意造型的，塞 aspect_ratio/quality 裸字段无意义）。per (vendor, image_edit) 一条即覆盖该 vendor 全部
-    // 图像模型（create op 用 {{model.modelKey}} 运行时填）。
+    // 4b. 图生图/改图 mapping（image_edit）：按 modelKey 精确绑定，同一 vendor 内允许不同协议并存。
+    // 不 reconcile：edit body 是协议刻意造型，不能把通用参数盲塞进去。
     if (mappingEdit && targetKind === "image") {
       tx.upsertMapping({
         vendorKey,
         taskKind: "image_edit",
+        // 改图协议是模型级能力：同一 vendor 可同时有 chat 多模态与 JSON /images/edits。
+        // 精确绑定后 selectTaskMapping 会优先命中本模型，不再被 vendor 级 generic mapping 误投。
+        modelKey,
         name: `${modelDisplayName} · 改图`,
         enabled: true,
         create: mappingEdit,
@@ -274,7 +285,7 @@ function paramsToOnboardingFields(
 
 /** 按 kind 给出 commit draft 的 targetKind + 标准参数 + 传输 mapping（图片同步无 query / 视频异步带 query；
  *  图片另带 image_edit 改图 op = 图生图）。 */
-function draftShapeForKind(kind: "text" | "image" | "video" | "audio"): {
+function draftShapeForKind(kind: "text" | "image" | "video" | "audio", modelKey = ""): {
   targetKind: "text" | "image" | "video" | "audio";
   modelFields: JsonRecord[];
   mappingCreate?: HttpOperation;
@@ -283,7 +294,8 @@ function draftShapeForKind(kind: "text" | "image" | "video" | "audio"): {
 } {
   if (kind === "image") {
     const t = newapiTransportFor("image");
-    return { targetKind: "image", modelFields: paramsToOnboardingFields(t.params), mappingCreate: t.create, ...(t.edit ? { mappingEdit: t.edit } : {}) };
+    const edit = newapiImageEditProfileForModel(modelKey).operation;
+    return { targetKind: "image", modelFields: paramsToOnboardingFields(t.params), mappingCreate: t.create, mappingEdit: edit };
   }
   if (kind === "video") {
     const t = newapiTransportFor("video");
@@ -359,7 +371,7 @@ export function commitManualOpenAiCompatibleModels(payload: {
   for (const m of cleanModels) {
     const displayName = m.displayName || humanizeModelKey(m.id);
     // 图片/视频走 new-api 标准传输模板（per-model kind）；文本不带 mapping（chat 直连）。
-    const shape = draftShapeForKind(m.kind);
+    const shape = draftShapeForKind(m.kind, m.id);
     const outcome = {
       status: "success",
       trialId: "",

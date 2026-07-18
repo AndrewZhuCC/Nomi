@@ -70,6 +70,7 @@ export function taskTemplateParams(request: TaskParamsInput): JsonRecord {
   const durationRaw = extras.duration ?? extras.durationSeconds ?? extras.videoDuration;
   const duration = typeof durationRaw === "number" ? durationRaw : firstString(durationRaw);
   const refInput = referenceInputParams(extras);
+  const jsonEditInput = jsonImageEditInput(refInput.reference_images);
   return {
     ...extras,
     size,
@@ -92,6 +93,12 @@ export function taskTemplateParams(request: TaskParamsInput): JsonRecord {
     // 声明式模板展不开变长数组，故在此把 reference_images 建成 parts 数组；op body 用整 token 引用，
     // renderTemplateValue 会把它摊平进 content（见 requestPipeline flatMap）。空数组 → content 只剩 text 项。
     chat_image_parts: chatImageParts(refInput.reference_images),
+    // JSON image-edits 协议（xAI Imagine 等）：单图必须是 image，多图必须是 images；模板层只负责
+    // 丢 undefined，条件造型在这里一次完成。官方最多 3 张，超出的参考图不误发给严格端点。
+    json_edit_image: jsonEditInput.image,
+    json_edit_images: jsonEditInput.images,
+    // xAI 单图编辑固定沿用输入图比例；只有多图编辑才允许显式 aspect_ratio。
+    json_edit_aspect_ratio: jsonEditInput.images ? firstString(extras.aspect_ratio, extras.aspectRatio) || undefined : undefined,
     max_tokens: extras.maxTokens ?? extras.max_tokens,
   };
 }
@@ -145,4 +152,17 @@ export function chatImageParts(referenceImages: unknown): Array<{ type: "image_u
   return referenceImages
     .filter((u): u is string => typeof u === "string" && u.trim() !== "")
     .map((url) => ({ type: "image_url", image_url: { url } }));
+}
+
+export type JsonImageEditReference = { type: "image_url"; url: string };
+
+/** JSON image-edits 输入造型：1 张走 image，2~3 张走 images；保序、去空、按官方上限截断。 */
+export function jsonImageEditInput(referenceImages: unknown): { image?: JsonImageEditReference; images?: JsonImageEditReference[] } {
+  if (!Array.isArray(referenceImages)) return {};
+  const refs = referenceImages
+    .filter((url): url is string => typeof url === "string" && url.trim() !== "")
+    .slice(0, 3)
+    .map((url) => ({ type: "image_url" as const, url }));
+  if (refs.length === 1) return { image: refs[0] };
+  return refs.length > 1 ? { images: refs } : {};
 }
