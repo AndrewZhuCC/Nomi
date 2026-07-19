@@ -12,7 +12,7 @@
   "main": "dist-electron/main.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/aqm857886159/Nomi.git"
+    "url": "https://github.com/AndrewZhuCC/Nomi.git"
   },
   "scripts": {
     "dev": "node ./scripts/dev-electron.mjs",
