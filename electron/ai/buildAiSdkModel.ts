@@ -17,6 +17,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import type { LanguageModelV1 } from "ai";
 import { applyProfileToRequestBody, getModelProfile } from "./modelProfiles";
+import { applyOpenAIToolSchemaStrictToBody } from "./openaiToolSchemaStrict";
 // 单一真相源：provider-kind 联合定义在 catalog/types，这里只 re-export，避免并行定义漂移（规则 1）。
 import type { AiSdkProviderKind } from "../catalog/types";
 export type { AiSdkProviderKind };
@@ -48,7 +49,10 @@ function buildProfiledFetch(modelId: string): typeof fetch {
     if (init?.body && typeof init.body === "string") {
       try {
         const body = JSON.parse(init.body) as Record<string, unknown>;
-        const adjusted = applyProfileToRequestBody(body, profile);
+        // 先规范化 tools schema（OpenAI-strict：properties ⊆ required），再套 model profile。
+        // 修复生成助手 Missing 'scope' 等 400（zod optional → JSON Schema 不进 required）。
+        const withStrictTools = applyOpenAIToolSchemaStrictToBody(body);
+        const adjusted = applyProfileToRequestBody(withStrictTools, profile);
         if (debug) {
           const fs = await import("node:fs");
           fs.writeFileSync(
