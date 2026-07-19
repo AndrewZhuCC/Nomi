@@ -19,13 +19,12 @@ describe("normalizeJsonSchemaForOpenAIStrict", () => {
     };
     const out = normalizeJsonSchemaForOpenAIStrict(input) as {
       required: string[];
-      properties: { scope: { anyOf: unknown[] } };
+      properties: { scope: { type?: unknown; enum?: unknown[]; anyOf?: unknown[] } };
     };
     expect(out.required).toEqual(["id", "scope"]);
-    expect(out.properties.scope.anyOf).toEqual([
-      { type: "string", enum: ["all", "selective"] },
-      { type: "null" },
-    ]);
+    // enum 字段：type 含 null，enum 含 null
+    expect(out.properties.scope.type).toEqual(["string", "null"]);
+    expect(out.properties.scope.enum).toEqual(["all", "selective", null]);
     expect(listOpenAIStrictViolations(out)).toEqual([]);
   });
 
@@ -111,5 +110,51 @@ describe("normalizeToolsJsonSchemaForOpenAIStrict / body", () => {
   it("applyOpenAIToolSchemaStrictToBody 无 tools 时原样返回", () => {
     const body = { model: "x", messages: [] };
     expect(applyOpenAIToolSchemaStrictToBody(body)).toBe(body);
+  });
+
+  it("Responses API 扁平 tools[].parameters 也会规范化", () => {
+    const body = {
+      tools: [
+        {
+          type: "function",
+          name: "author_skill",
+          parameters: {
+            type: "object",
+            properties: {
+              manifest: {
+                type: "object",
+                properties: {
+                  stages: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        modelPrefs: {
+                          type: "array",
+                          items: {
+                            type: "object",
+                            properties: {
+                              kind: { type: "string" },
+                              family: { type: "string" },
+                            },
+                            required: ["kind"],
+                          },
+                        },
+                      },
+                      required: [],
+                    },
+                  },
+                },
+                required: [],
+              },
+            },
+            required: ["manifest"],
+          },
+        },
+      ],
+    };
+    const fixed = applyOpenAIToolSchemaStrictToBody(body);
+    const params = (fixed.tools as Array<{ parameters: unknown }>)[0].parameters;
+    expect(listOpenAIStrictViolations(params)).toEqual([]);
   });
 });

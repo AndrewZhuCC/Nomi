@@ -26,17 +26,25 @@ export type DocumentToolName = (typeof documentToolNames)[number];
 
 // author_skill 的 manifest 形状（贴近 skillManifestSchema，帮 LLM 一次产出合法 skill.json；
 // 最终校验仍在 electron/skills/skillPackage.ts 的 validateSkillPackage → parseSkillManifest）。
+//
+// 注意：字段尽量全部 required（OpenAI-strict / 部分中转要求 properties ⊆ required）。
+// 真正「可省略」的语义用空串 / 空数组表达，不要用 zod .optional()——否则 AI SDK 出站 schema
+// 会把 key 放进 properties 却不进 required，触发 HTTP 400 Missing 'family' 等。
 const authorSkillModelPref = z.object({
   kind: z.enum(["text", "image", "video"]),
-  family: z.string().min(1).optional(),
+  family: z
+    .string()
+    .describe("Model family preference (e.g. 'gpt' / 'flux' / 'seedance'). Use empty string if no preference."),
 });
 const authorSkillStage = z.object({
   id: z.string().min(1),
   goal: z.string().min(1),
   tools: z.array(z.string().min(1)),
-  dependsOn: z.array(z.string().min(1)).optional(),
-  pause: z.boolean().optional(),
-  modelPrefs: z.array(authorSkillModelPref).optional(),
+  dependsOn: z.array(z.string().min(1)).describe("Upstream stage ids this stage needs. Empty array if none."),
+  pause: z.boolean().describe("Whether to pause for user review after this stage."),
+  modelPrefs: z
+    .array(authorSkillModelPref)
+    .describe("Preferred modality/family pairs for this stage. Empty array if no preference."),
 });
 const authorSkillManifest = z.object({
   name: z.string().min(1).describe("Stable id, e.g. 'music.mv' or 'ecom.product-shot'."),
@@ -48,8 +56,10 @@ const authorSkillManifest = z.object({
     .array(z.enum(["text", "image", "video"]))
     .describe("Capability modalities needed end-to-end. Declare every modality any stage needs, so missing ones surface as a capability gap."),
   permissions: z.array(z.enum(["read-only", "create", "delete", "export"])),
-  author: z.string().min(1).optional(),
-  stages: z.array(authorSkillStage).optional().describe("Multi-stage playbook (optional). modelPrefs only declare kind+family, never a specific model."),
+  author: z.string().describe("Author name; empty string if unknown."),
+  stages: z
+    .array(authorSkillStage)
+    .describe("Multi-stage playbook. Empty array for a single-shot skill. modelPrefs only declare kind+family, never a specific model."),
 });
 
 const contentParam = z.object({
