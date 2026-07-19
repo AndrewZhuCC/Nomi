@@ -38,6 +38,23 @@ describe("通用中转 image_edit（chat/completions 多模态）请求装配", 
     const body = renderBody(NEWAPI_IMAGE_EDIT_OP, "画只猫", params);
     expect((body.messages as AnyRec[])[0].content).toEqual([{ type: "text", text: "画只猫" }]);
   });
+
+  it("档案 input_urls（gpt-image-2 i2i）→ content 含 image_url（此前只读 reference_images 会漏图）", () => {
+    const params = taskTemplateParams({
+      extras: {
+        archetypeInput: {
+          model: "gpt-image-2-image-to-image",
+          input_urls: ["https://x/a.png", "https://x/b.png"],
+        },
+      },
+    });
+    const body = renderBody(NEWAPI_IMAGE_EDIT_OP, "把背景换成夜晚", params);
+    expect((body.messages as AnyRec[])[0].content).toEqual([
+      { type: "text", text: "把背景换成夜晚" },
+      { type: "image_url", image_url: { url: "https://x/a.png" } },
+      { type: "image_url", image_url: { url: "https://x/b.png" } },
+    ]);
+  });
 });
 
 describe("通用中转 image_edit 按模型协议精确分流", () => {

@@ -70,7 +70,10 @@ export function taskTemplateParams(request: TaskParamsInput): JsonRecord {
   const durationRaw = extras.duration ?? extras.durationSeconds ?? extras.videoDuration;
   const duration = typeof durationRaw === "number" ? durationRaw : firstString(durationRaw);
   const refInput = referenceInputParams(extras);
-  const jsonEditInput = jsonImageEditInput(refInput.reference_images);
+  // 档案路径（gpt-image-2 等）把参考图放在 input_urls / reference_image_urls，而不是 reference_images。
+  // chat_image_parts / json_edit_* 若只读 reference_images，会静默发出「无图」的 image_edit（护栏仍通过）。
+  const refUrls = collectReferenceImageUrls(refInput, extras, request);
+  const jsonEditInput = jsonImageEditInput(refUrls);
   return {
     ...extras,
     size,
@@ -86,13 +89,13 @@ export function taskTemplateParams(request: TaskParamsInput): JsonRecord {
     duration,
     // 空→undefined（不是 ""）：body 的 `image: "{{request.params.image_url}}"` 整 token 渲染时，
     // undefined 会被丢弃、"" 却会当空字段发出去（纯文生图/文生视频误带 image:"" 会被部分中转拒）。
-    image_url: firstReferenceImage(request) || undefined,
+    image_url: firstReferenceImage(request) || refUrls[0] || undefined,
     // 参考输入（单图首/尾帧 + 多参考数组）—— 构建逻辑在 electron/catalog/archetypeInput（M5）。
     ...refInput,
     // chat/completions 多模态图生图（通用中转 gemini/nano-banana 系）：参考图 → content 里的 image_url 项数组。
-    // 声明式模板展不开变长数组，故在此把 reference_images 建成 parts 数组；op body 用整 token 引用，
+    // 声明式模板展不开变长数组，故在此把全部参考图 URL 建成 parts；op body 用整 token 引用，
     // renderTemplateValue 会把它摊平进 content（见 requestPipeline flatMap）。空数组 → content 只剩 text 项。
-    chat_image_parts: chatImageParts(refInput.reference_images),
+    chat_image_parts: chatImageParts(refUrls),
     // JSON image-edits 协议（xAI Imagine 等）：单图必须是 image，多图必须是 images；模板层只负责
     // 丢 undefined，条件造型在这里一次完成。官方最多 3 张，超出的参考图不误发给严格端点。
     json_edit_image: jsonEditInput.image,
@@ -144,6 +147,56 @@ export function imageEditGuardError(kind: string, request: TaskParamsInput, hasM
     return `模型「${modelLabel}」在本机没有配置「${kind === "image_edit" ? "图生图（改图）" : "图生视频"}」通道，参考图不会生效。旧版本接入的模型不含此能力：请在「模型接入」里删除该模型后重新接入一次，或改用支持${what}的模型。`;
   }
   return null;
+}
+
+/**
+ * 从档案参考输入 + extras + 单图聚合里收集全部参考图 URL（保序、去重）。
+ * 与 hasImageEditReferences 同源广度：档案路径的 input_urls / image_urls / reference_image_urls
+ * 必须进入 wire（chat_image_parts / json_edit_*），否则 image_edit 会静默退化成纯文生。
+ */
+export function collectReferenceImageUrls(
+  refInput: JsonRecord,
+  extras: JsonRecord = {},
+  request?: TaskParamsInput,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed || seen.has(trimmed) || !REF_URL_RE.test(trimmed)) return;
+    seen.add(trimmed);
+    out.push(trimmed);
+  };
+  const walk = (value: unknown): void => {
+    if (typeof value === "string") {
+      push(value);
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) walk(item);
+      return;
+    }
+    if (value && typeof value === "object") {
+      for (const item of Object.values(value as Record<string, unknown>)) walk(item);
+    }
+  };
+
+  // 1) 档案 / 非档案 referenceInputParams 产出（input_urls、reference_images、volcengine 嵌套…）
+  walk(refInput);
+  // 2) 非档案 camelCase / 裸键（referenceInputParams 在有 archetypeInput 时会短路，不再回填这些）
+  walk(extras.referenceImages);
+  walk(extras.referenceImageUrls);
+  walk(extras.image);
+  walk(extras.image_url);
+  walk(extras.imageUrl);
+  walk(extras.firstFrameUrl);
+  walk(extras.lastFrameUrl);
+  // 3) firstReferenceImage 兜底（含 firstFrame 等已在 walk 里的键时，push 去重）
+  if (request) {
+    const first = firstReferenceImage(request);
+    if (first) push(first);
+  }
+  return out;
 }
 
 /** 参考图 URL 数组 → chat/completions content 的 image_url 项数组。非字符串/空 URL 剔除。 */
