@@ -1,0 +1,63 @@
+# Fork 专用：只打 Windows 安装包并上传到 GitHub Release（不依赖 electron-builder 自动 publish）。
+name: Windows I2I Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag (e.g. v0.16.8-i2i.2)'
+        required: true
+        default: 'v0.16.8-i2i.2'
+
+permissions:
+  contents: write
+
+jobs:
+  build-win:
+    name: Build & publish Windows
+    runs-on: windows-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.8.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm run build
+      - name: Package (Windows, no auto-publish)
+        run: pnpm exec electron-builder --win --x64 --publish never
+      - name: Create/update GitHub Release with installer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          ls -la release/
+          mapfile -t EXES < <(find release -maxdepth 1 -type f -name '*.exe' | sort)
+          if [ "${#EXES[@]}" -eq 0 ]; then
+            echo "No .exe found under release/"
+            exit 1
+          fi
+          # 稳定别名
+          cp "${EXES[0]}" release/Nomi-windows-setup.exe
+          NOTES='Nomi fork fix: image_edit chat_image_parts 包含档案 input_urls（gpt-image-2 图生图不再静默退化纯文生）。
+
+验收：图生图请把参考图放进「输入图」槽，不要只塞进 prompt。'
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${EXES[@]}" release/Nomi-windows-setup.exe --clobber
+          else
+            gh release create "$TAG" "${EXES[@]}" release/Nomi-windows-setup.exe \
+              --title "$TAG" \
+              --notes "$NOTES"
+          fi
+          gh release view "$TAG"
